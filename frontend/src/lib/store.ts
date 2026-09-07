@@ -7,6 +7,7 @@ import type {
   CrawlJob,
   CrawlItem,
   ScoreValue,
+  AppUser,
 } from '../types/index.ts';
 import {
   DEFAULT_ORG_ID,
@@ -28,6 +29,50 @@ class Store {
   private cells: BenchmarkCell[] = JSON.parse(JSON.stringify(INITIAL_CELLS));
   private crawlJobs: CrawlJob[] = [];
   private crawlItems: CrawlItem[] = JSON.parse(JSON.stringify(INITIAL_CRAWL_ITEMS));
+  private users: AppUser[] = [
+    {
+      id: 'usr-admin',
+      username: 'admin',
+      password: 'mb@2025',
+      name: 'Nguyễn Văn Quản Trị',
+      email: 'admin@mbbank.com.vn',
+      role: 'admin',
+      role_name: 'Quản trị viên hệ thống',
+      department: 'Khối Chuyển đổi số & CNTT',
+      avatar_initials: 'QT',
+      is_active: true,
+      created_at: '2026-09-01T08:00:00.000Z',
+      updated_at: '2026-09-01T08:00:00.000Z',
+    },
+    {
+      id: 'usr-chienluoc',
+      username: 'chienluoc',
+      password: 'mb@2025',
+      name: 'Nguyễn Hoàng',
+      email: 'hoangnv@mbbank.com.vn',
+      role: 'strategist',
+      role_name: 'Chuyên viên Chiến lược cấp cao',
+      department: 'Khối Chiến lược',
+      avatar_initials: 'NH',
+      is_active: true,
+      created_at: '2026-09-01T08:00:00.000Z',
+      updated_at: '2026-09-01T08:00:00.000Z',
+    },
+    {
+      id: 'usr-analyst',
+      username: 'user',
+      password: '123456',
+      name: 'Trần Minh Tuấn',
+      email: 'tuantm@mbbank.com.vn',
+      role: 'analyst',
+      role_name: 'Chuyên viên Nghiên cứu Sản phẩm',
+      department: 'Khối KH Doanh nghiệp SME',
+      avatar_initials: 'MT',
+      is_active: true,
+      created_at: '2026-09-01T08:00:00.000Z',
+      updated_at: '2026-09-01T08:00:00.000Z',
+    },
+  ];
 
   private getClient() {
     return getSupabaseAdmin() || getSupabaseClient();
@@ -880,6 +925,129 @@ class Store {
 
     this.crawlItems.unshift(fullItem);
     return fullItem;
+  }
+
+  // --- USERS ---
+  async getUsers(): Promise<AppUser[]> {
+    const supabase = this.getClient();
+    if (supabase) {
+      const { data, error } = await supabase
+        .from('app_users')
+        .select('*')
+        .order('created_at', { ascending: true });
+      if (!error && data && data.length > 0) {
+        return data as AppUser[];
+      }
+    }
+    return [...this.users];
+  }
+
+  async getUserById(id: string): Promise<AppUser | undefined> {
+    const supabase = this.getClient();
+    if (supabase) {
+      const { data } = await supabase.from('app_users').select('*').eq('id', id).single();
+      if (data) return data as AppUser;
+    }
+    return this.users.find((u) => u.id === id);
+  }
+
+  async getUserByUsername(username: string): Promise<AppUser | undefined> {
+    const uname = username.trim().toLowerCase();
+    const supabase = this.getClient();
+    if (supabase) {
+      const { data } = await supabase
+        .from('app_users')
+        .select('*')
+        .or(`username.eq.${uname},email.eq.${uname}`)
+        .single();
+      if (data) return data as AppUser;
+    }
+    return this.users.find(
+      (u) => u.username.toLowerCase() === uname || (u.email && u.email.toLowerCase() === uname)
+    );
+  }
+
+  async createUser(payload: {
+    username: string;
+    password: string;
+    name: string;
+    email?: string;
+    role?: 'admin' | 'strategist' | 'analyst';
+    role_name?: string;
+    department?: string;
+  }): Promise<AppUser> {
+    const nameWords = payload.name.trim().split(/\s+/);
+    let avatarInitials = 'MB';
+    if (nameWords.length === 1) {
+      avatarInitials = nameWords[0].slice(0, 2).toUpperCase();
+    } else if (nameWords.length >= 2) {
+      avatarInitials = (nameWords[nameWords.length - 2][0] + nameWords[nameWords.length - 1][0]).toUpperCase();
+    }
+
+    const fullUser: AppUser = {
+      id: crypto.randomUUID(),
+      username: payload.username.trim().toLowerCase(),
+      password: payload.password.trim(),
+      name: payload.name.trim(),
+      email: payload.email?.trim() || `${payload.username.trim().toLowerCase()}@mbbank.com.vn`,
+      role: payload.role || 'analyst',
+      role_name: payload.role_name || (payload.role === 'admin' ? 'Quản trị viên hệ thống' : payload.role === 'strategist' ? 'Chuyên viên Chiến lược' : 'Chuyên viên Nghiên cứu'),
+      department: payload.department || 'Khối Chiến lược',
+      avatar_initials: avatarInitials,
+      is_active: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    const supabase = this.getClient();
+    if (supabase) {
+      const { data, error } = await supabase.from('app_users').insert(fullUser).select().single();
+      if (!error && data) {
+        return data as AppUser;
+      }
+    }
+
+    this.users.push(fullUser);
+    return fullUser;
+  }
+
+  async updateUser(id: string, payload: Partial<AppUser>): Promise<AppUser | undefined> {
+    const supabase = this.getClient();
+    const updateData = { ...payload, updated_at: new Date().toISOString() };
+    if (payload.name) {
+      const nameWords = payload.name.trim().split(/\s+/);
+      if (nameWords.length === 1) {
+        updateData.avatar_initials = nameWords[0].slice(0, 2).toUpperCase();
+      } else if (nameWords.length >= 2) {
+        updateData.avatar_initials = (nameWords[nameWords.length - 2][0] + nameWords[nameWords.length - 1][0]).toUpperCase();
+      }
+    }
+
+    if (supabase) {
+      const { data, error } = await supabase.from('app_users').update(updateData).eq('id', id).select().single();
+      if (!error && data) {
+        return data as AppUser;
+      }
+    }
+
+    const idx = this.users.findIndex((u) => u.id === id);
+    if (idx !== -1) {
+      this.users[idx] = { ...this.users[idx], ...updateData };
+      return this.users[idx];
+    }
+    return undefined;
+  }
+
+  async deleteUser(id: string): Promise<boolean> {
+    const supabase = this.getClient();
+    if (supabase) {
+      const { error } = await supabase.from('app_users').delete().eq('id', id);
+      if (!error) return true;
+    }
+
+    const initialLen = this.users.length;
+    this.users = this.users.filter((u) => u.id !== id);
+    return this.users.length < initialLen;
   }
 }
 

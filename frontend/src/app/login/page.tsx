@@ -4,8 +4,7 @@ import React, { useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/providers/AuthProvider';
-import { MOCK_ACCOUNTS } from '@/lib/auth';
-import { Lock, User, Eye, EyeOff, ShieldCheck, ArrowRight, AlertCircle, Sparkles, Building2 } from 'lucide-react';
+import { Lock, User, Eye, EyeOff, ShieldCheck, ArrowRight, AlertCircle, Building2, HelpCircle } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -50,12 +49,6 @@ export default function LoginPage() {
     }
   };
 
-  const handleQuickLogin = (accUsername: string, accPassword: string) => {
-    setUsername(accUsername);
-    setPassword(accPassword);
-    setErrorMessage(null);
-  };
-
   return (
     <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-[#07153a] via-[#0b246a] to-[#05112e] p-4">
       {/* Ambient background glows */}
@@ -64,7 +57,7 @@ export default function LoginPage() {
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] rounded-full bg-[#0b36c8]/10 blur-[160px] pointer-events-none" />
 
       {/* Main Login Container */}
-      <div className="w-full max-w-[440px] relative z-10">
+      <div className="w-full max-w-[430px] relative z-10">
         {/* Header Branding */}
         <div className="text-center mb-7">
           <div className="inline-flex items-center justify-center mb-3.5 bg-white/10 backdrop-blur-md px-6 py-3 rounded-2xl border border-white/15 shadow-xl">
@@ -119,7 +112,7 @@ export default function LoginPage() {
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="admin hoặc chienluoc"
+                  placeholder="Nhập tên đăng nhập hoặc email"
                   className="w-full pl-10 pr-4 py-2.5 bg-[#f8fafc] border border-[#d0d5dd] rounded-xl text-xs text-[#0f2357] font-medium placeholder-[#98a2b3] focus:outline-none focus:border-[#1646d8] focus:bg-white focus:ring-2 focus:ring-[#1646d8]/15 transition-all"
                   autoComplete="username"
                   autoFocus
@@ -188,33 +181,10 @@ export default function LoginPage() {
             </button>
           </form>
 
-          {/* Quick Login Test Chips */}
-          <div className="mt-6 pt-5 border-t border-[#eef2f8]">
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-[#667085] mb-2.5">
-              <Sparkles className="w-3.5 h-3.5 text-[#f59e0b]" />
-              <span>Tài khoản dùng thử (Bấm để điền nhanh):</span>
-            </div>
-
-            <div className="grid grid-cols-3 gap-2">
-              {MOCK_ACCOUNTS.map((acc) => (
-                <button
-                  key={acc.id}
-                  type="button"
-                  onClick={() => handleQuickLogin(acc.username, acc.passwords[0])}
-                  className="p-2 rounded-lg bg-[#f4f7fc] hover:bg-[#eaf1fc] border border-[#e2e8f4] text-left transition-colors cursor-pointer group"
-                >
-                  <div className="font-bold text-[11px] text-[#1646d8] group-hover:text-[#0f34a8]">
-                    {acc.username}
-                  </div>
-                  <div className="text-[10px] text-[#667085] truncate">
-                    {acc.name}
-                  </div>
-                  <div className="text-[9px] text-[#98a2b3] mt-0.5">
-                    MK: {acc.passwords[0]}
-                  </div>
-                </button>
-              ))}
-            </div>
+          {/* Secure Note */}
+          <div className="mt-6 pt-4 border-t border-[#eef2f8] flex items-center gap-2 text-[11px] text-[#667085]">
+            <HelpCircle className="w-3.5 h-3.5 text-[#1646d8] shrink-0" />
+            <span>Tài khoản được cấp riêng bởi Quản trị viên Khối Chiến lược.</span>
           </div>
         </div>
 

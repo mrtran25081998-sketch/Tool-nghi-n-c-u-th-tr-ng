@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { useRouter, usePathname } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import {
   AuthUser,
   LoginCredentials,
@@ -31,7 +31,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
-  const pathname = usePathname();
 
   useEffect(() => {
     // Check initial auth state from session/cookie
@@ -44,19 +43,45 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (credentials: LoginCredentials): Promise<{ success: boolean; error?: string }> => {
     try {
-      const authenticatedUser = authenticateUser(credentials);
-      if (!authenticatedUser) {
-        return {
-          success: false,
-          error: 'Tài khoản hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại!',
-        };
+      // 1. Try API login first (validates against DB and dynamically added users)
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: credentials.username,
+          password: credentials.password,
+        }),
+      });
+
+      const resData = await res.json();
+      if (res.ok && resData.success && resData.data) {
+        const authenticatedUser = resData.data as AuthUser;
+        setUser(authenticatedUser);
+        saveAuthSession(authenticatedUser, credentials.rememberMe);
+        return { success: true };
       }
 
-      setUser(authenticatedUser);
-      saveAuthSession(authenticatedUser, credentials.rememberMe);
+      // 2. Fallback to client-side mock accounts if API call fails
+      const fallbackUser = authenticateUser(credentials);
+      if (fallbackUser) {
+        setUser(fallbackUser);
+        saveAuthSession(fallbackUser, credentials.rememberMe);
+        return { success: true };
+      }
 
-      return { success: true };
+      return {
+        success: false,
+        error: resData.error || 'Tài khoản hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại!',
+      };
     } catch (err: any) {
+      // Fallback
+      const fallbackUser = authenticateUser(credentials);
+      if (fallbackUser) {
+        setUser(fallbackUser);
+        saveAuthSession(fallbackUser, credentials.rememberMe);
+        return { success: true };
+      }
+
       return {
         success: false,
         error: err?.message || 'Có lỗi xảy ra trong quá trình đăng nhập.',

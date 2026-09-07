@@ -4,16 +4,21 @@ import React, { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChevronDown, ChevronRight, Layers, Database } from 'lucide-react';
+import { useAuth } from '@/providers/AuthProvider';
+import { ChevronDown, ChevronRight, Layers, Database, Users, Shield } from 'lucide-react';
 
 export default function AppSidebar() {
   const pathname = usePathname();
+  const { user } = useAuth();
   const [productMenuOpen, setProductMenuOpen] = useState(true);
 
   const isSummary = pathname === '/summary' || pathname === '/';
   const isProducts = pathname === '/products';
   const isMatrix = pathname === '/matrix';
+  const isUsers = pathname === '/users';
   const isProductDataActive = isProducts || isMatrix;
+
+  const isAdmin = user?.role === 'admin';
 
   return (
     <aside className="w-[220px] shrink-0 border-r border-[#d9e2f2] p-[18px_14px] sticky top-0 h-screen bg-white flex flex-col justify-between z-30">
@@ -90,6 +95,28 @@ export default function AppSidebar() {
               }`}
             >
               <span>Ma trận chấm điểm vị thế</span>
+            </Link>
+          </div>
+        )}
+
+        {/* Admin Navigation Section */}
+        {isAdmin && (
+          <div className="mt-4 pt-3 border-t border-[#eef2f8]">
+            <div className="text-[11px] uppercase tracking-wider text-[#98a2b3] font-semibold my-[10px] mx-2 flex items-center gap-1.5">
+              <Shield className="w-3 h-3 text-[#1646d8]" />
+              <span>Quản trị</span>
+            </div>
+
+            <Link
+              href="/users"
+              className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg my-0.5 text-[13px] transition-colors ${
+                isUsers
+                  ? 'bg-[#eef5ff] text-[#1646d8] font-bold'
+                  : 'text-[#344054] hover:bg-[#f7f9fc] font-medium'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              <span>Quản lý tài khoản</span>
             </Link>
           </div>
         )}

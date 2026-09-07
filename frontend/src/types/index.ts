@@ -152,3 +152,19 @@ export interface FullBenchmarkData {
   components: BenchmarkComponent[];
   cells: BenchmarkCell[];
 }
+
+export interface AppUser {
+  id: string;
+  username: string;
+  password?: string;
+  name: string;
+  email?: string;
+  role: 'admin' | 'strategist' | 'analyst';
+  role_name?: string;
+  department?: string;
+  avatar_initials?: string;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
