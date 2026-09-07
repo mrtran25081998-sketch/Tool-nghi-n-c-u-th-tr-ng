@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/providers/AuthProvider';
 import { MOCK_ACCOUNTS } from '@/lib/auth';
@@ -65,10 +66,16 @@ export default function LoginPage() {
       {/* Main Login Container */}
       <div className="w-full max-w-[440px] relative z-10">
         {/* Header Branding */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center gap-2 mb-3 bg-white/10 backdrop-blur-md px-4 py-2 rounded-2xl border border-white/15 shadow-xl">
-            <span className="text-[#ef3f4b] text-[32px] leading-none font-black animate-pulse">✣</span>
-            <span className="text-white text-[26px] font-extrabold tracking-wider">MB BANK</span>
+        <div className="text-center mb-7">
+          <div className="inline-flex items-center justify-center mb-3.5 bg-white/10 backdrop-blur-md px-6 py-3 rounded-2xl border border-white/15 shadow-xl">
+            <Image
+              src="/images/mb-logo-dark.png"
+              alt="MB Bank Logo"
+              width={160}
+              height={55}
+              className="h-10 w-auto object-contain"
+              priority
+            />
           </div>
           <h1 className="text-white text-xl font-bold tracking-tight mb-1">
             Hệ thống BIZ Intelligence v2.0
@@ -139,7 +146,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-[#98a2b3] hover:text-[#344054] transition-colors"
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-[#98a2b3] hover:text-[#344054] transition-colors cursor-pointer"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>

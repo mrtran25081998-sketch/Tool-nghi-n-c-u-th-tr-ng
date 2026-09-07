@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect } from 'react';
+import Image from 'next/image';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/providers/AuthProvider';
 import AppSidebar from './AppSidebar';
@@ -28,9 +29,15 @@ export default function AppLayoutShell({ children }: { children: React.ReactNode
   if (isLoading || (!isAuthenticated && !isLoginPage)) {
     return (
       <div className="min-h-screen w-full flex flex-col items-center justify-center bg-[#07153a] text-white">
-        <div className="flex items-center gap-2 mb-4">
-          <span className="text-[#ef3f4b] text-[32px] leading-none font-black animate-pulse">✣</span>
-          <span className="text-white text-[24px] font-extrabold tracking-wider">MB BANK</span>
+        <div className="mb-4">
+          <Image
+            src="/images/mb-logo-dark.png"
+            alt="MB Bank Logo"
+            width={140}
+            height={45}
+            className="h-9 w-auto object-contain"
+            priority
+          />
         </div>
         <div className="w-8 h-8 border-3 border-white/20 border-t-[#1646d8] rounded-full animate-spin mb-3" />
         <div className="text-xs text-[#a5b7db] font-medium">Đang xác thực phiên làm việc...</div>

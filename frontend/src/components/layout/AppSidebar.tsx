@@ -1,9 +1,10 @@
 'use client';
 
 import React, { useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChevronDown, ChevronRight, LayoutGrid, Layers, BarChart3, Database } from 'lucide-react';
+import { ChevronDown, ChevronRight, Layers, Database } from 'lucide-react';
 
 export default function AppSidebar() {
   const pathname = usePathname();
@@ -18,9 +19,15 @@ export default function AppSidebar() {
     <aside className="w-[220px] shrink-0 border-r border-[#d9e2f2] p-[18px_14px] sticky top-0 h-screen bg-white flex flex-col justify-between z-30">
       <div>
         {/* Logo */}
-        <Link href="/summary" className="flex items-center gap-2 text-[24px] font-extrabold text-[#0b36c8] mb-6 no-underline">
-          <span className="text-[#e31937] text-[28px] leading-none">✣</span>
-          <span>MB</span>
+        <Link href="/summary" className="flex items-center mb-6 no-underline px-1 py-1 hover:opacity-90 transition-opacity">
+          <Image
+            src="/images/mb-logo-light.png"
+            alt="MB Bank Logo"
+            width={130}
+            height={38}
+            className="h-8 w-auto object-contain"
+            priority
+          />
         </Link>
 
         {/* Navigation Section */}
@@ -45,7 +52,7 @@ export default function AppSidebar() {
         <button
           type="button"
           onClick={() => setProductMenuOpen(!productMenuOpen)}
-          className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg my-0.5 text-[13px] text-left transition-colors ${
+          className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg my-0.5 text-[13px] text-left transition-colors cursor-pointer ${
             isProductDataActive
               ? 'text-[#1646d8] font-bold'
               : 'text-[#344054] hover:bg-[#f7f9fc] font-medium'
