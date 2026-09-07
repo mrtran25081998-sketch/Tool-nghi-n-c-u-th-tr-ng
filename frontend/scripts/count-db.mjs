@@ -1,21 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = 'https://unhqxpogmwxwjlwwckqt.supabase.co';
-const supabaseKey = 'sb_publishable_JRtMNipkhh3xpK3n9Wxokw_CAsWXuGX';
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://unhqxpogmwxwjlwwckqt.supabase.co';
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
-async function checkCounts() {
-  const tables = ['banks', 'benchmark_groups', 'benchmark_components', 'benchmark_cells', 'source_pairs', 'crawl_items'];
-  console.log('📊 THỐNG KÊ DỮ LIỆU TRÊN SUPABASE CLOUD:');
-  for (const table of tables) {
-    const { count, error } = await supabase.from(table).select('*', { count: 'exact', head: true });
-    if (error) {
-      console.log(`❌ ${table}: Lỗi ${error.message}`);
-    } else {
-      console.log(`✅ Bảng [${table}]: ${count} bản ghi`);
-    }
+async function countAll() {
+  const tables = ['banks', 'benchmark_groups', 'benchmark_components', 'benchmark_cells', 'crawl_items', 'crawl_jobs', 'source_pairs'];
+  for (const t of tables) {
+    const { count, error } = await supabase.from(t).select('*', { count: 'exact', head: true });
+    console.log(`${t}:`, error ? `error: ${error.message}` : count);
   }
 }
 
-checkCounts();
+countAll();
