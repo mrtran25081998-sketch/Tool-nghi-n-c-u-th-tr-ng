@@ -134,3 +134,5 @@ python backend/tests/run_tests.py
 
 1. **Facebook Crawler Adapter**: Do chính sách bảo mật của Meta, việc crawl Facebook fanpage yêu cầu `META_GRAPH_ACCESS_TOKEN` hợp lệ. Nếu chưa cấu hình, worker chuyển trạng thái sang `provider_not_configured` an toàn và tiếp tục pipeline website mà không gây lỗi crash.
 2. **SSRF Protection**: Crawler chủ động chặn toàn bộ dải IP Private (`10.x`, `192.168.x`, `172.16.x`, `127.x`, `169.254.x`) và các giao thức nguy hiểm (`file://`, `gopher://`). Chỉ các URL public `http`/`https` mới được phép quét.
+
+<!-- trigger: 2026-09-07T16:06:54.107Z -->
