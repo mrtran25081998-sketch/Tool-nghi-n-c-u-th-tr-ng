@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import Providers from './providers';
 
 export const metadata: Metadata = {
   title: 'MB Competitive Product Intelligence Tool',
@@ -14,7 +15,7 @@ export default function RootLayout({
   return (
     <html lang="vi" className="dark">
       <body className="bg-background text-foreground antialiased min-h-screen">
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
