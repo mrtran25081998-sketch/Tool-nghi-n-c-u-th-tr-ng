@@ -1,0 +1,4002 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MB Competitive Intelligence Prototype</title>
+<style>
+:root{
+  --mb-blue:#1646d8;
+  --mb-blue-2:#2563eb;
+  --mb-blue-50:#eef5ff;
+  --mb-blue-100:#e1ecff;
+  --ink:#0f2357;
+  --muted:#667085;
+  --line:#d9e2f2;
+  --soft:#f7f9fc;
+  --soft2:#f2f5fa;
+  --green:#18a566;
+  --green-bg:#e9f8f0;
+  --red:#ef3f4b;
+  --red-bg:#fff0f1;
+  --amber:#f59e0b;
+  --amber-bg:#fff7df;
+  --shadow:0 6px 22px rgba(16,42,89,.07);
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:Inter, ui-sans-serif, system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:#fff;color:var(--ink);font-size:13px}
+button,input,select,textarea{font:inherit}
+button{cursor:pointer}
+.app{display:grid;grid-template-columns:220px 1fr;min-height:100vh}
+.sidebar{border-right:1px solid var(--line);padding:18px 14px;position:sticky;top:0;height:100vh;background:#fff}
+.logo{display:flex;align-items:center;gap:10px;font-size:24px;font-weight:800;color:#0b36c8;margin-bottom:24px}
+.logo .mark{color:#e31937;font-size:30px}
+.nav-title{font-size:11px;text-transform:uppercase;color:#98a2b3;margin:14px 8px 6px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:8px;margin:2px 0;color:#344054;cursor:pointer}
+.nav-item:hover{background:var(--soft)}
+.nav-item.active{background:var(--mb-blue-50);color:var(--mb-blue);font-weight:700}
+.nav-item.sub{padding-left:34px;font-size:12px}
+.nav-group-open{color:var(--mb-blue);font-weight:700}
+.bottom-note{position:absolute;bottom:18px;left:14px;right:14px;padding:14px;border-radius:10px;background:linear-gradient(135deg,#f7faff,#edf4ff);color:#345}
+.main{min-width:0}
+.topbar{height:54px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:flex-end;padding:0 26px;gap:16px;position:sticky;top:0;background:#fff;z-index:20}
+.user{display:flex;align-items:center;gap:9px}
+.avatar{width:34px;height:34px;border-radius:50%;background:var(--mb-blue-100);display:grid;place-items:center;font-weight:700;color:var(--mb-blue)}
+.page{padding:14px 20px 26px;max-width:1600px;margin:auto}
+.header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px}
+.header h1{margin:0;font-size:22px;line-height:1.2}
+.header p{margin:4px 0 0;color:var(--muted)}
+.info-pill{padding:8px 11px;border-radius:8px;background:var(--mb-blue-50);color:#3156a8;font-size:12px}
+.card{border:1px solid var(--line);border-radius:12px;background:#fff;box-shadow:var(--shadow)}
+.source-card{padding:12px 14px}
+.source-grid{display:grid;grid-template-columns:1fr 1px 1fr;gap:16px}
+.divider{background:var(--line)}
+.source-col h3{margin:0 0 2px;display:flex;align-items:center;gap:8px;font-size:15px}
+.source-col p{margin:0 0 8px;color:var(--muted);font-size:11px}
+.source-row{display:grid;grid-template-columns:130px 18px minmax(0,1fr) 34px 28px;gap:6px;align-items:center;margin:6px 0;min-height:31px}
+.source-row .bank-name{font-weight:600}
+.ok-dot{width:16px;height:16px;border-radius:50%;display:grid;place-items:center;background:var(--green);color:white;font-size:10px}
+.pending-dot{width:16px;height:16px;border-radius:50%;display:grid;place-items:center;background:#d0d5dd;color:white;font-size:10px}
+.url-box{height:31px;border:1px solid #cdd8ea;border-radius:6px;padding:0 9px;width:100%;color:#475467}
+.icon-btn{height:31px;border:1px solid #97b7ff;border-radius:6px;background:#fff;color:var(--mb-blue);display:grid;place-items:center}
+.trash-btn{border:0;background:none;color:var(--red);font-size:16px}
+.add-source{margin-top:8px;border:1px solid var(--mb-blue);background:#fff;color:var(--mb-blue);padding:8px 15px;border-radius:7px;font-weight:700}
+.range-row{display:grid;grid-template-columns:250px 1fr 1fr 240px;gap:18px;align-items:end;margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
+.range-title{display:flex;align-items:center;gap:8px}
+.range-title strong{display:block}
+.range-title span{display:block;color:var(--muted);font-size:11px}
+.field label{display:block;color:#667085;font-size:11px;margin-bottom:4px}
+.field input{height:36px;width:100%;border:1px solid #cdd8ea;border-radius:7px;padding:0 10px}
+.primary{height:38px;border:0;border-radius:7px;background:linear-gradient(90deg,#2465ed,#0c53e8);color:#fff;font-weight:700}
+.secondary{height:36px;border:1px solid var(--mb-blue);border-radius:7px;background:#fff;color:var(--mb-blue);font-weight:700;padding:0 13px}
+.ghost{height:36px;border:1px solid #cbd5e1;border-radius:7px;background:#fff;color:#344054;font-weight:600;padding:0 13px}
+.section{margin-top:12px;padding:10px 12px}
+.section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.section-head h2{font-size:15px;margin:0}
+.section-head small{color:var(--muted)}
+.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:8px}
+table{width:100%;border-collapse:collapse}
+th{background:#f1f5fb;color:#1f3d7a;font-size:11px;padding:8px 9px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+td{padding:8px 9px;border-bottom:1px solid #e6ecf4;vertical-align:top}
+tbody tr:hover td{background:#fbfdff}
+.source-link{display:inline-flex;align-items:center;gap:6px;color:var(--mb-blue);text-decoration:none}
+.page-row{display:flex;justify-content:flex-end;gap:6px;padding-top:8px}
+.page-btn{width:30px;height:30px;border:1px solid var(--line);background:#fff;border-radius:6px;color:#344054}
+.page-btn.active{background:var(--mb-blue);color:#fff}
+.matrix-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.matrix-table td,.matrix-table th{padding:5px 7px;font-size:11px}
+.group-row td{background:#edf3fb!important;color:#153c8a;font-weight:800}
+.group-toggle{cursor:pointer;margin-right:6px}
+.score{display:block;text-align:center;padding:3px 0;border-radius:5px;font-weight:700}
+.s0{background:#eef1f5;color:#667085}
+.s1{background:#e8f0ff;color:#3566c9}
+.s2{background:#b9d2ff;color:#143f93}
+.s3{background:#c4f1d7;color:#10683e}
+.mb-behind{background:#ffd8db!important;color:#9d1c26!important}
+.legend{display:flex;gap:16px;align-items:center;margin-top:8px;color:#475467;font-size:11px}
+.legend .box{display:inline-grid;place-items:center;width:30px;height:22px;border-radius:6px;font-weight:700}
+.hidden{display:none!important}
+
+/* Initial seed */
+.seed-toolbar{display:flex;justify-content:space-between;gap:10px;align-items:center;margin-bottom:8px}
+.seed-toolbar .left{display:flex;gap:8px;flex-wrap:wrap}
+.seed-toolbar .right{display:flex;gap:8px;align-items:center}
+.switch{width:38px;height:21px;border-radius:20px;background:#d0d5dd;position:relative;cursor:pointer}
+.switch::after{content:"";position:absolute;width:17px;height:17px;background:#fff;border-radius:50%;top:2px;left:2px;box-shadow:0 1px 3px rgba(0,0,0,.2);transition:.2s}
+.switch.on{background:var(--mb-blue)}
+.switch.on::after{left:19px}
+.seed-table{table-layout:fixed;min-width:1280px}
+.seed-table th:nth-child(1){width:190px}
+.seed-table th:nth-child(n+2):nth-child(-n+6){width:220px}
+.seed-table th:last-child{width:92px}
+.seed-table td{font-size:11px;line-height:1.35;padding:7px 8px}
+.seed-table .group-row td{padding:6px 8px}
+.seed-table .feature-name{font-weight:600;color:#203d79}
+.seed-table textarea{width:100%;min-height:56px;resize:vertical;border:1px solid #bfd0eb;border-radius:6px;padding:7px;background:#fff;color:#20304a;line-height:1.35}
+.action-stack{display:flex;gap:7px;justify-content:center}
+.action-link{border:0;background:none;color:var(--mb-blue);font-size:15px}
+.action-link.danger{color:var(--red)}
+.row-editing td{background:#fffef8}
+.seed-bottom{display:flex;justify-content:space-between;align-items:center;margin-top:8px;color:var(--muted);font-size:11px}
+
+
+.group-row-wrap{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.group-row-main{display:flex;align-items:center;gap:4px}
+.group-actions{display:flex;align-items:center;gap:5px}
+.group-action-btn{
+  width:25px;height:25px;border:1px solid #bcd0f4;border-radius:5px;background:#fff;
+  color:#1d5de7;display:grid;place-items:center;font-size:12px
+}
+.group-action-btn:hover{background:#eef5ff}
+.group-action-btn.danger{color:#e5484d;border-color:#f0c7cc}
+.group-action-btn.danger:hover{background:#fff1f2}
+
+
+.column-head-wrap{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.column-head-name{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.column-head-actions{display:flex;align-items:center;gap:3px;flex:0 0 auto;margin-left:6px}
+.column-head-btn{
+  width:23px;height:23px;border:1px solid rgba(255,255,255,.65);
+  border-radius:5px;background:rgba(255,255,255,.12);color:#fff;
+  display:grid;place-items:center;font-size:11px;line-height:1
+}
+.column-head-btn:hover{background:rgba(255,255,255,.25)}
+.column-head-btn.danger{color:#fff}
+.confirm-box{padding:8px 0 2px;color:#475467;line-height:1.5}
+.confirm-warning{
+  margin-top:10px;padding:10px;border-radius:7px;background:#fff5f5;
+  border:1px solid #ffd1d5;color:#a72a33;font-size:12px
+}
+
+
+/* Group / column actions: hidden by default.
+   They appear only when hovering the NAME area (and remain visible while moving onto the icons). */
+.group-label-actions,
+.column-label-actions{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  width:max-content;
+  max-width:100%;
+  position:relative;
+}
+
+.group-actions,
+.column-head-actions{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  opacity:0;
+  visibility:hidden;
+  pointer-events:none;
+  transform:translateX(-3px);
+  transition:opacity .14s ease, transform .14s ease, visibility .14s ease;
+}
+
+/* Trigger only from the compact label+actions wrapper, not the whole row/header cell */
+.group-label-actions:hover .group-actions,
+.group-label-actions:focus-within .group-actions,
+.column-label-actions:hover .column-head-actions,
+.column-label-actions:focus-within .column-head-actions{
+  opacity:1;
+  visibility:visible;
+  pointer-events:auto;
+  transform:translateX(0);
+}
+
+.group-row-wrap{
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  gap:6px;
+  min-height:28px;
+}
+
+.group-row-main{
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+  min-width:0;
+}
+
+.column-head-wrap{
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  min-height:28px;
+}
+
+.group-name-text,
+.column-head-name{
+  cursor:default;
+  display:inline-block;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+
+.group-name-text:hover,
+.column-head-name:hover{
+  text-decoration:underline;
+  text-decoration-style:dotted;
+  text-underline-offset:3px;
+}
+
+/* Icon color fix */
+.group-action-btn,
+.column-head-btn{
+  background:#fff;
+  border:1px solid #b9c9e8;
+  color:#1f5edb !important;
+  box-shadow:none;
+}
+
+.group-action-btn:hover,
+.column-head-btn:hover{
+  background:#eef5ff;
+  border-color:#7ea5ff;
+  color:#1646d8 !important;
+}
+
+.group-action-btn.danger,
+.column-head-btn.danger{
+  background:#fff;
+  border-color:#f0c7cc;
+  color:#e5484d !important;
+}
+
+.group-action-btn.danger:hover,
+.column-head-btn.danger:hover{
+  background:#fff1f2;
+  border-color:#ef9ea5;
+  color:#d92d20 !important;
+}
+
+/* Disabled MB delete icon should look neutral, not wrongly colored */
+.column-head-btn:disabled{
+  background:#f7f8fa;
+  border-color:#d9dee8;
+  color:#98a2b3 !important;
+  opacity:1 !important;
+  cursor:not-allowed !important;
+}
+
+
+.action-stack .action-link{
+  color:#1f5edb !important;
+}
+.action-stack .action-link:hover{
+  color:#1646d8 !important;
+}
+.action-stack .action-link.danger{
+  color:#e5484d !important;
+}
+.action-stack .action-link.danger:hover{
+  color:#d92d20 !important;
+}
+
+
+/* ===== Wide benchmark table: preserve full content when adding columns ===== */
+.seed-table{
+  table-layout:auto !important;
+  width:max-content !important;
+  min-width:100% !important;
+  border-collapse:separate;
+  border-spacing:0;
+}
+
+/* Feature column */
+.seed-table th:first-child,
+.seed-table td:first-child{
+  min-width:190px;
+  width:190px;
+  max-width:220px;
+}
+
+/* Every bank column keeps a readable width and the table scrolls horizontally */
+.seed-table th:not(:first-child):not(:last-child),
+.seed-table td:not(:first-child):not(:last-child){
+  min-width:250px;
+  width:250px;
+  max-width:320px;
+  white-space:normal;
+  word-break:break-word;
+  overflow-wrap:anywhere;
+}
+
+/* Do not truncate new bank names */
+.seed-table .column-head-name{
+  white-space:normal !important;
+  overflow:visible !important;
+  text-overflow:clip !important;
+  line-height:1.25;
+}
+
+/* The scroll container owns horizontal overflow */
+#page-seed .table-wrap{
+  overflow-x:auto !important;
+  overflow-y:visible;
+  position:relative;
+}
+
+/* Sticky action column on the right */
+.seed-table th:last-child,
+.seed-table td:last-child{
+  position:sticky;
+  right:0;
+  min-width:72px;
+  width:72px;
+  max-width:72px;
+  z-index:6;
+  background:#fff;
+  box-shadow:-8px 0 12px -12px rgba(15,35,87,.45);
+}
+
+.seed-table thead th:last-child{
+  z-index:10;
+  background:#f1f5fb;
+}
+
+.seed-table tbody tr:hover td:last-child{
+  background:#fbfdff;
+}
+
+/* Group rows keep their original full-row style */
+.seed-table .group-row td{
+  position:static !important;
+  max-width:none !important;
+  width:auto !important;
+  background:#edf3fb !important;
+  box-shadow:none !important;
+}
+
+/* ===== Compact 3-dot row action ===== */
+.row-action-cell{
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  min-height:28px;
+}
+
+.more-btn{
+  width:30px;
+  height:30px;
+  border:1px solid #cbd7ea;
+  border-radius:7px;
+  background:#fff;
+  color:#3156a8;
+  font-size:19px;
+  line-height:1;
+  display:grid;
+  place-items:center;
+  padding:0 0 8px;
+}
+
+.more-btn:hover{
+  background:#eef5ff;
+  border-color:#8fb0ff;
+  color:#1646d8;
+}
+
+/* Global fixed popover so it is never clipped by the scrolling table */
+.row-menu{
+  position:fixed;
+  z-index:1000;
+  min-width:160px;
+  padding:5px;
+  background:#fff;
+  border:1px solid #d8e2f1;
+  border-radius:9px;
+  box-shadow:0 14px 36px rgba(15,35,87,.18);
+}
+
+.row-menu.hidden{
+  display:none !important;
+}
+
+.row-menu button{
+  width:100%;
+  border:0;
+  background:transparent;
+  border-radius:6px;
+  padding:8px 9px;
+  display:flex;
+  align-items:center;
+  gap:9px;
+  text-align:left;
+  color:#344054;
+}
+
+.row-menu button:hover{
+  background:#f3f7ff;
+  color:#1646d8;
+}
+
+.row-menu button.danger{
+  color:#d92d20;
+}
+
+.row-menu button.danger:hover{
+  background:#fff1f2;
+  color:#b42318;
+}
+
+/* Matrix can also scroll instead of squeezing newly added competitors */
+.matrix-table{
+  width:max-content;
+  min-width:100%;
+}
+.matrix-table th:not(:first-child),
+.matrix-table td:not(:first-child){
+  min-width:54px;
+}
+
+
+.seed-table th:last-child{text-align:center}
+
+
+/* ===== Sticky first column: Nhóm / Tính năng ===== */
+.seed-table th:first-child,
+.seed-table td:first-child{
+  position:sticky;
+  left:0;
+  z-index:7;
+  background:#fff;
+  box-shadow:8px 0 12px -12px rgba(15,35,87,.45);
+}
+
+.seed-table thead th:first-child{
+  z-index:12;
+  background:#f1f5fb;
+}
+
+.seed-table tbody tr:hover td:first-child{
+  background:#fbfdff;
+}
+
+/* Group rows span the full table, but keep the label anchored at the left while horizontal scrolling */
+.seed-table .group-row td{
+  position:static !important;
+}
+.seed-table .group-row .group-row-wrap{
+  position:sticky;
+  left:8px;
+  z-index:8;
+  width:max-content;
+  max-width:calc(100vw - 170px);
+}
+
+/* ===== Drag & drop ===== */
+.drag-handle{
+  display:inline-grid;
+  place-items:center;
+  width:20px;
+  height:22px;
+  flex:0 0 20px;
+  margin-right:3px;
+  border-radius:5px;
+  color:#98a2b3;
+  cursor:grab;
+  user-select:none;
+  font-size:14px;
+  line-height:1;
+}
+.drag-handle:hover{
+  color:#245edb;
+  background:#eef5ff;
+}
+.drag-handle:active{
+  cursor:grabbing;
+}
+
+.seed-table tr.drag-source{
+  opacity:.45;
+}
+.seed-table th.drag-source{
+  opacity:.55;
+}
+
+.seed-table tr.drag-over-before > td{
+  box-shadow:inset 0 2px 0 #2465ed;
+}
+.seed-table tr.drag-over-after > td{
+  box-shadow:inset 0 -2px 0 #2465ed;
+}
+.seed-table th.drag-over-before{
+  box-shadow:inset 2px 0 0 #2465ed;
+}
+.seed-table th.drag-over-after{
+  box-shadow:inset -2px 0 0 #2465ed;
+}
+
+/* Keep sticky cells above bank columns while dragging horizontally */
+.seed-table th:first-child,
+.seed-table td:first-child{
+  will-change:transform;
+}
+
+/* Row first-cell layout with drag handle */
+.feature-cell-wrap{
+  display:flex;
+  align-items:flex-start;
+  gap:3px;
+}
+.feature-cell-text{
+  min-width:0;
+  flex:1;
+}
+
+
+/* Stronger group drag affordance: same feel as row/column handles */
+.group-row .drag-handle{
+  width:24px;
+  height:24px;
+  flex:0 0 24px;
+  border:1px solid #c6d3e8;
+  background:#fff;
+  color:#6b7da7;
+  border-radius:6px;
+  font-size:15px;
+  margin-right:4px;
+}
+.group-row .drag-handle:hover{
+  background:#eef5ff;
+  border-color:#8fb0ff;
+  color:#1646d8;
+}
+.group-row .group-row-main{
+  gap:3px;
+}
+.group-row.drag-source td{
+  background:#e4edfb !important;
+}
+
+
+/* Single vertical benchmark matrix */
+.matrix-single-wrap{
+  overflow-x:auto;
+}
+.matrix-single-table{
+  width:100%;
+  min-width:900px;
+  table-layout:auto;
+}
+.matrix-single-table th:first-child,
+.matrix-single-table td:first-child{
+  min-width:260px;
+}
+.matrix-single-table th:not(:first-child),
+.matrix-single-table td:not(:first-child){
+  min-width:72px;
+  text-align:center;
+}
+.matrix-single-table .group-row td{
+  text-align:left !important;
+}
+
+
+.group-row.drag-over-before > td{
+  box-shadow:inset 0 3px 0 #2465ed !important;
+}
+.group-row.drag-over-after > td{
+  box-shadow:inset 0 -3px 0 #2465ed !important;
+}
+
+
+.import-preview{
+  margin-top:12px;
+  border:1px solid #d8e2f1;
+  border-radius:8px;
+  overflow:hidden;
+}
+.import-preview-row{
+  display:grid;
+  grid-template-columns:140px 1fr;
+  gap:10px;
+  padding:8px 10px;
+  border-bottom:1px solid #edf1f6;
+}
+.import-preview-row:last-child{border-bottom:0}
+.import-preview-row b{color:#344054}
+.import-preview-row span{color:#52637d}
+.import-help{
+  margin-top:10px;
+  padding:9px 10px;
+  border-radius:7px;
+  background:#f6f9ff;
+  color:#52637d;
+  font-size:12px;
+  line-height:1.5;
+}
+
+
+.nav-item{
+  position:relative;
+}
+.nav-chevron{
+  margin-left:auto;
+  color:#667085;
+  font-size:13px;
+  transition:transform .18s ease;
+}
+.nav-group-open .nav-chevron{
+  transform:rotate(0deg);
+}
+#productSubmenu{
+  display:block;
+}
+#productSubmenu.collapsed{
+  display:none;
+}
+.nav-item.sub{
+  padding-left:38px;
+  font-size:12px;
+  line-height:1.35;
+}
+.nav-item.sub.active{
+  background:var(--mb-blue-50);
+  color:var(--mb-blue);
+  font-weight:700;
+}
+
+
+/* Discovery table: show 10 records, then scroll vertically */
+.discovery-scroll{
+  max-height:438px;
+  overflow-y:auto;
+  overflow-x:auto;
+}
+
+.discovery-table{
+  width:100%;
+}
+
+.discovery-table thead th{
+  position:sticky;
+  top:0;
+  z-index:5;
+  background:#f1f5fb;
+}
+
+.discovery-table tbody tr{
+  height:39px;
+}
+
+.discovery-table td{
+  vertical-align:middle;
+}
+
+
+/* ===== Position / ranking section ===== */
+.position-grid{
+  display:grid;
+  grid-template-columns:minmax(520px,1.05fr) minmax(500px,1fr);
+  gap:12px;
+  margin-bottom:12px;
+}
+.position-card{
+  padding:14px 16px;
+  min-height:330px;
+}
+.position-card-head{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:10px;
+}
+.position-card-head h2{
+  margin:0;
+  font-size:14px;
+  color:#152c63;
+}
+.position-card-head small{
+  display:block;
+  margin-top:3px;
+  color:#667085;
+  font-size:11px;
+}
+.position-table-wrap{overflow:auto}
+.position-table{width:100%;border-collapse:collapse}
+.position-table th{
+  background:transparent;
+  color:#7b879e;
+  font-size:10px;
+  font-weight:600;
+  border-bottom:1px solid #e8edf5;
+  padding:6px 7px;
+}
+.position-table td{
+  padding:8px 7px;
+  border-bottom:1px solid #edf1f6;
+  vertical-align:middle;
+  font-size:11px;
+}
+.position-table tr.position-mb td{background:#fff1f2}
+.position-table tr.position-mb td:first-child{border-radius:8px 0 0 8px}
+.position-table tr.position-mb td:last-child{border-radius:0 8px 8px 0}
+.position-rank{color:#667085;width:26px}
+.position-bank{min-width:142px;font-weight:600;color:#51617f}
+.position-mb .position-bank{color:#ff4d57}
+.position-score{
+  white-space:nowrap;
+  font-size:24px !important;
+  line-height:1;
+  font-weight:850;
+  letter-spacing:-.3px;
+  color:#365de8;
+}
+.position-mb .position-score{color:#ff4d57}
+.position-score small{
+  font-size:11px;
+  color:#91a0bb;
+  font-weight:700;
+  margin-left:2px;
+  vertical-align:2px;
+}
+.position-profile{
+  display:flex;
+  align-items:center;
+  gap:4px;
+  min-width:230px;
+}
+.profile-segment{
+  height:24px;
+  min-width:30px;
+  padding:0 7px;
+  border-radius:5px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:12px;
+  line-height:1;
+  font-weight:800;
+  letter-spacing:.1px;
+  overflow:hidden;
+}
+.profile-segment.p3{background:#c9f1df;color:#14724c}
+.profile-segment.p2{background:#c9d6fb;color:#22459d}
+.profile-segment.p1{background:#e4ebff;color:#4966b5}
+.profile-segment.p0{background:#edf0f4;color:#788397}
+.profile-segment.pn{background:#fafafa;color:#98a2b3;border:1px dashed #d7dde7}
+.position-m3{
+  width:34px;
+  text-align:center;
+  color:#08724d;
+  font-size:15px !important;
+  font-weight:800;
+}
+.position-legend{
+  display:flex;
+  flex-wrap:wrap;
+  gap:11px;
+  margin-top:12px;
+  color:#667085;
+  font-size:11px;
+}
+.profile-dot{
+  display:inline-block;
+  width:10px;
+  height:10px;
+  border-radius:3px;
+  margin-right:3px;
+  vertical-align:-1px;
+}
+.profile-dot.p3{background:#c9f1df}
+.profile-dot.p2{background:#c9d6fb}
+.profile-dot.p1{background:#e4ebff}
+.profile-dot.p0{background:#edf0f4}
+.profile-dot.pn{background:#fafafa;border:1px dashed #cfd7e5}
+.radar-head{align-items:flex-start}
+.radar-legend{
+  display:flex;
+  gap:13px;
+  color:#697895;
+  font-size:10px;
+  white-space:nowrap;
+  padding-top:2px;
+}
+.radar-line{
+  display:inline-block;
+  width:12px;
+  height:3px;
+  border-radius:3px;
+  margin-right:4px;
+  vertical-align:3px;
+}
+.radar-line.mb{background:#ff626b}
+.radar-line.leader{background:#667eea}
+.radar-container{
+  width:100%;
+  height:260px;
+  display:grid;
+  place-items:center;
+}
+.position-radar-svg{
+  width:100%;
+  height:100%;
+  overflow:visible;
+}
+.radar-grid-line{
+  fill:none;
+  stroke:#dde4f0;
+  stroke-width:1;
+}
+.radar-axis{
+  stroke:#e3e8f2;
+  stroke-width:1;
+}
+.radar-leader-area{
+  fill:rgba(102,126,234,.09);
+  stroke:#667eea;
+  stroke-width:2;
+}
+.radar-mb-area{
+  fill:rgba(255,98,107,.12);
+  stroke:#ff626b;
+  stroke-width:2;
+}
+.radar-leader-point{fill:#667eea}
+.radar-mb-point{fill:#ff626b}
+.radar-label{
+  fill:#6d7890;
+  font-size:10px;
+  font-weight:600;
+}
+.matrix-section-head{margin-bottom:8px}
+@media(max-width:1200px){
+  .position-grid{grid-template-columns:1fr}
+}
+
+
+/* ===== Matrix workspace: left analytics stack + right matrix ===== */
+.matrix-workspace{
+  display:grid;
+  grid-template-columns:minmax(500px, 40%) minmax(0, 60%);
+  gap:14px;
+  align-items:start;
+}
+
+.position-stack{
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+  min-width:0;
+}
+
+.position-stack .position-card{
+  width:100%;
+  min-height:0;
+}
+
+.position-ranking-card{
+  padding:14px 16px;
+}
+
+.position-radar-card{
+  padding:14px 16px 10px;
+}
+
+.position-radar-card .radar-container{
+  height:350px;
+}
+
+.radar-legend-left{
+  justify-content:flex-start;
+  margin:2px 0 2px;
+}
+
+.matrix-detail-card{
+  margin-top:0 !important;
+  padding:12px 14px;
+  min-width:0;
+}
+
+.matrix-right-scroll{
+  max-height:720px;
+  overflow:auto;
+}
+
+.matrix-right-scroll .matrix-single-table thead th{
+  position:sticky;
+  top:0;
+  z-index:5;
+  background:#f1f5fb;
+}
+
+.matrix-legend{
+  padding-top:10px;
+  flex-wrap:wrap;
+}
+
+/* Compact ranking a little on the left column */
+.position-stack .position-table td{
+  padding:7px 6px;
+}
+
+.position-stack .position-bank{
+  min-width:118px;
+}
+
+.position-stack .position-profile{
+  min-width:230px;
+}
+
+.position-stack .position-score{
+  font-size:15px !important;
+}
+
+/* Old two-up class is no longer used */
+.position-grid{
+  display:block;
+}
+
+@media(max-width:1350px){
+  .matrix-workspace{
+    grid-template-columns:minmax(470px, 42%) minmax(0, 58%);
+  }
+}
+
+@media(max-width:1050px){
+  .matrix-workspace{
+    grid-template-columns:1fr;
+  }
+  .position-stack{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+  }
+  .matrix-right-scroll{
+    max-height:none;
+  }
+}
+
+@media(max-width:760px){
+  .position-stack{
+    grid-template-columns:1fr;
+  }
+}
+
+
+/* Radar full group names + interactive scores */
+.radar-container{
+  position:relative;
+  overflow:visible;
+}
+
+.radar-label{
+  font-size:10.5px;
+  font-weight:650;
+  fill:#586984;
+  cursor:help;
+  transition:fill .12s ease,font-weight .12s ease;
+}
+
+.radar-label:hover{
+  fill:#1646d8;
+  font-weight:800;
+}
+
+.radar-mb-point,
+.radar-leader-point{
+  cursor:help;
+  transition:r .12s ease,filter .12s ease;
+}
+
+.radar-mb-point:hover,
+.radar-leader-point:hover{
+  r:6;
+  filter:drop-shadow(0 1px 2px rgba(15,35,87,.25));
+}
+
+.radar-tooltip{
+  position:absolute;
+  z-index:30;
+  min-width:190px;
+  max-width:250px;
+  padding:9px 10px;
+  border:1px solid #d6e0ef;
+  border-radius:8px;
+  background:#fff;
+  box-shadow:0 10px 28px rgba(15,35,87,.18);
+  pointer-events:none;
+  opacity:0;
+  visibility:hidden;
+  transform:translateY(3px);
+  transition:opacity .1s ease,transform .1s ease,visibility .1s ease;
+  color:#344054;
+  font-size:10.5px;
+}
+
+.radar-tooltip.show{
+  opacity:1;
+  visibility:visible;
+  transform:translateY(0);
+}
+
+.radar-tooltip-title{
+  font-weight:800;
+  color:#173d8f;
+  margin-bottom:7px;
+  line-height:1.35;
+}
+
+.radar-tooltip-row{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:16px;
+  padding:3px 5px;
+  border-radius:5px;
+}
+
+.radar-tooltip-row.active{
+  background:#f2f6ff;
+}
+
+.radar-tooltip-row span{
+  display:flex;
+  align-items:center;
+  gap:5px;
+}
+
+.radar-tooltip-row b{
+  font-size:12px;
+  color:#172b5b;
+}
+
+.radar-tooltip-dot{
+  width:8px;
+  height:8px;
+  border-radius:50%;
+  display:inline-block;
+}
+.radar-tooltip-dot.mb{background:#ff626b}
+.radar-tooltip-dot.leader{background:#667eea}
+
+.radar-tooltip-bank{
+  margin-top:5px;
+  padding-top:5px;
+  border-top:1px solid #edf1f6;
+  color:#7b879e;
+  line-height:1.35;
+}
+
+
+.position-table th:nth-child(3),
+.position-table td:nth-child(3){
+  min-width:84px;
+}
+
+
+/* ===== Radar competitor comparison controls ===== */
+.radar-compare-controls{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:6px;
+  margin:2px 0 8px;
+  padding:8px 9px;
+  border:1px solid #e1e8f3;
+  border-radius:9px;
+  background:#f9fbff;
+}
+
+.radar-chip{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  height:28px;
+  padding:0 9px;
+  border:1px solid #d4deed;
+  border-radius:16px;
+  background:#fff;
+  color:#5c6980;
+  font-size:10.5px;
+  font-weight:650;
+  cursor:pointer;
+  user-select:none;
+}
+.radar-chip:hover{
+  border-color:#9bb5ed;
+  background:#f4f7ff;
+}
+.radar-chip.active{
+  border-color:#7396ea;
+  background:#edf3ff;
+  color:#234a9a;
+}
+.radar-chip.mb{
+  cursor:default;
+  border-color:#ffc7cb;
+  background:#fff2f3;
+  color:#d83d48;
+}
+.radar-chip.leader{
+  border-style:dashed;
+}
+.radar-chip-dot{
+  width:8px;
+  height:8px;
+  border-radius:50%;
+  flex:0 0 8px;
+}
+.radar-chip-count{
+  color:#98a2b3;
+  font-size:9px;
+  margin-left:1px;
+}
+.radar-compare-note{
+  margin-left:auto;
+  color:#98a2b3;
+  font-size:9.5px;
+}
+
+.radar-series-line{
+  fill:none;
+  stroke-width:2.2;
+  stroke-linejoin:round;
+  stroke-linecap:round;
+}
+.radar-series-area{
+  stroke-width:2.4;
+  stroke-linejoin:round;
+}
+.radar-series-point{
+  cursor:help;
+  stroke:#fff;
+  stroke-width:1.2;
+}
+.radar-leader-dash{
+  fill:none;
+  stroke:#667eea;
+  stroke-width:1.7;
+  stroke-dasharray:5 4;
+  opacity:.75;
+}
+
+/* Tooltip rows for multiple competitors */
+.radar-tooltip-row{
+  min-width:170px;
+}
+.radar-tooltip-row .series-name{
+  max-width:125px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+
+
+/* ===== Add / Edit component modal: description left, score right ===== */
+.component-editor-modal{
+  width:min(920px,94vw);
+  max-height:88vh;
+  display:flex;
+  flex-direction:column;
+}
+
+.component-editor-modal .component-editor-body{
+  overflow-y:auto;
+  padding-right:4px;
+  margin-top:10px;
+}
+
+.component-editor-list{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.component-bank-row{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 150px;
+  gap:12px;
+  align-items:start;
+  padding:10px 12px;
+  border:1px solid #e0e7f2;
+  border-radius:9px;
+  background:#fbfdff;
+}
+
+.component-bank-row:hover{
+  border-color:#c4d3ee;
+  background:#f9fbff;
+}
+
+.component-bank-desc label,
+.component-bank-score label{
+  display:block;
+  margin-bottom:5px;
+  color:#667085;
+  font-size:11px;
+  font-weight:600;
+}
+
+.component-bank-name{
+  color:#173d8f;
+  font-weight:700;
+}
+
+.component-bank-desc textarea{
+  width:100%;
+  min-height:82px;
+  resize:vertical;
+  border:1px solid #cdd8ea;
+  border-radius:7px;
+  padding:9px 10px;
+  line-height:1.4;
+  background:#fff;
+}
+
+.component-bank-score{
+  position:sticky;
+  top:0;
+}
+
+.component-bank-score input{
+  width:100%;
+  height:42px;
+  border:1px solid #cdd8ea;
+  border-radius:7px;
+  padding:0 10px;
+  font-size:16px;
+  font-weight:700;
+  text-align:center;
+  color:#173d8f;
+  background:#fff;
+}
+
+.score-helper{
+  margin-top:6px;
+  color:#98a2b3;
+  font-size:10px;
+  line-height:1.35;
+}
+
+.component-editor-modal .modal-actions{
+  flex:0 0 auto;
+  padding-top:12px;
+  margin-top:10px;
+  border-top:1px solid #edf1f6;
+  background:#fff;
+}
+
+@media(max-width:760px){
+  .component-bank-row{
+    grid-template-columns:1fr;
+  }
+  .component-bank-score{
+    position:static;
+  }
+}
+
+
+/* ===== Fix component editor modal overflow ===== */
+
+/* Expand the OUTER modal only when it contains the component editor */
+.modal:has(.component-editor-modal){
+  width:min(980px,94vw);
+  max-height:90vh;
+  padding:0;
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+}
+
+/* The inner editor must fit the outer modal instead of creating a second width */
+.modal:has(.component-editor-modal) .component-editor-modal{
+  width:100%;
+  max-width:none;
+  max-height:90vh;
+  min-height:0;
+  padding:18px;
+  box-sizing:border-box;
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+}
+
+/* Header stays fixed, only the bank list scrolls */
+.modal:has(.component-editor-modal) .component-editor-body{
+  flex:1 1 auto;
+  min-height:0;
+  max-height:none;
+  overflow-y:auto;
+  overflow-x:hidden;
+  padding-right:6px;
+  margin-top:12px;
+}
+
+/* Keep footer inside the modal */
+.modal:has(.component-editor-modal) .modal-actions{
+  flex:0 0 auto;
+  margin-top:12px;
+  padding-top:12px;
+  border-top:1px solid #edf1f6;
+  background:#fff;
+}
+
+/* Prevent fields from pushing the modal wider */
+.modal:has(.component-editor-modal) .modal-grid,
+.modal:has(.component-editor-modal) .field,
+.modal:has(.component-editor-modal) textarea,
+.modal:has(.component-editor-modal) input,
+.modal:has(.component-editor-modal) select{
+  min-width:0;
+}
+
+/* Cleaner bank row proportions */
+.component-bank-row{
+  grid-template-columns:minmax(0,1fr) 128px;
+  gap:14px;
+}
+
+/* Score column should not create horizontal overflow */
+.component-bank-score{
+  width:128px;
+  min-width:128px;
+}
+
+.component-bank-score input{
+  box-sizing:border-box;
+}
+
+/* Long descriptions stay inside their column */
+.component-bank-desc{
+  min-width:0;
+}
+
+.component-bank-desc textarea{
+  box-sizing:border-box;
+  max-width:100%;
+}
+
+/* Mobile fallback */
+@media(max-width:760px){
+  .modal:has(.component-editor-modal){
+    width:96vw;
+    max-height:94vh;
+  }
+
+  .modal:has(.component-editor-modal) .component-editor-modal{
+    max-height:94vh;
+    padding:14px;
+  }
+
+  .component-bank-row{
+    grid-template-columns:1fr;
+  }
+
+  .component-bank-score{
+    width:100%;
+    min-width:0;
+  }
+}
+
+
+/* ===== Paired source rows: one bank row = Facebook + Website ===== */
+.source-row{
+  position:relative;
+}
+.source-row .bank-name{
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.source-delete-placeholder{
+  width:28px;
+  height:31px;
+}
+.source-row-empty .url-box{
+  background:#fbfcfe;
+}
+.source-pair-note{
+  margin-top:8px;
+  color:#667085;
+  font-size:11px;
+  line-height:1.45;
+}
+
+
+/* Matrix header uses full platform names, consistent with the left-side information blocks */
+.matrix-single-table thead th:not(:first-child):not(:last-child){
+  min-width:118px;
+  max-width:150px;
+  white-space:normal;
+  line-height:1.25;
+  text-align:center;
+  vertical-align:middle;
+  padding:8px 6px;
+}
+
+.matrix-single-table thead th:first-child{
+  min-width:230px;
+}
+
+.matrix-single-table thead th:last-child{
+  min-width:58px;
+}
+
+
+/* ===== Matrix fit-to-card: no horizontal scroll ===== */
+.matrix-detail-card{
+  min-width:0;
+}
+
+.matrix-right-scroll{
+  overflow-y:auto !important;
+  overflow-x:hidden !important;
+  max-width:100%;
+}
+
+.matrix-single-table{
+  width:100% !important;
+  min-width:0 !important;
+  max-width:100% !important;
+  table-layout:fixed !important;
+}
+
+/* First column gets more room for feature names */
+.matrix-single-table th:first-child,
+.matrix-single-table td:first-child{
+  width:27%;
+  min-width:0 !important;
+  max-width:none !important;
+  white-space:normal;
+  word-break:break-word;
+  overflow-wrap:anywhere;
+  text-align:left;
+}
+
+/* Average column stays compact */
+.matrix-single-table th:last-child,
+.matrix-single-table td:last-child{
+  width:6%;
+  min-width:0 !important;
+  max-width:none !important;
+  text-align:center;
+}
+
+/* All bank columns share the remaining width equally */
+.matrix-single-table th:not(:first-child):not(:last-child),
+.matrix-single-table td:not(:first-child):not(:last-child){
+  width:auto !important;
+  min-width:0 !important;
+  max-width:none !important;
+  padding-left:5px;
+  padding-right:5px;
+  text-align:center;
+}
+
+/* Full platform names can wrap to 2-3 lines instead of forcing the table wider */
+.matrix-single-table thead th{
+  white-space:normal !important;
+  word-break:normal;
+  overflow-wrap:anywhere;
+  line-height:1.15;
+  font-size:10px;
+  padding:7px 4px;
+  vertical-align:middle;
+}
+
+/* Compact body to preserve readability while fitting all columns */
+.matrix-single-table tbody td{
+  font-size:10.5px;
+  padding:5px 5px;
+  vertical-align:middle;
+}
+
+.matrix-single-table .score{
+  min-width:0;
+  width:100%;
+  max-width:100%;
+  box-sizing:border-box;
+  padding:3px 2px;
+}
+
+/* Group rows still span the whole table cleanly */
+.matrix-single-table .group-row td{
+  width:auto !important;
+  max-width:none !important;
+}
+
+/* Give the right-side matrix a little more canvas on desktop */
+.matrix-workspace{
+  grid-template-columns:minmax(470px, 36%) minmax(0, 64%);
+}
+
+@media(max-width:1350px){
+  .matrix-workspace{
+    grid-template-columns:minmax(430px, 38%) minmax(0, 62%);
+  }
+}
+
+@media(max-width:1120px){
+  .matrix-workspace{
+    grid-template-columns:1fr;
+  }
+  .matrix-right-scroll{
+    overflow-x:auto !important;
+  }
+  .matrix-single-table{
+    min-width:760px !important;
+  }
+}
+
+/* Modals */
+.overlay{position:fixed;inset:0;background:rgba(15,35,87,.25);display:grid;place-items:center;z-index:100}
+.modal{width:min(680px,92vw);background:#fff;border-radius:12px;box-shadow:0 24px 70px rgba(12,34,80,.25);padding:18px}
+.modal h3{margin:0 0 12px}
+.modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.modal .field textarea,.modal .field select,.modal .field input{width:100%;border:1px solid #cdd8ea;border-radius:7px;padding:8px}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+.toast{position:fixed;right:22px;bottom:22px;background:#173d8f;color:#fff;padding:11px 14px;border-radius:8px;box-shadow:var(--shadow);z-index:200}
+@media(max-width:1100px){
+  .app{grid-template-columns:80px 1fr}
+  .sidebar .label,.bottom-note,.nav-title{display:none}
+  .logo{font-size:0}
+  .source-grid{grid-template-columns:1fr}
+  .divider{display:none}
+  .matrix-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar">
+    <div class="logo"><span class="mark">✣</span><span>MB</span></div>
+
+    <!-- LV1 -->
+    <div class="nav-item active" id="nav-summary" onclick="showPage('summary')">
+      <span>▥</span>
+      <span class="label">Tổng hợp dữ liệu</span>
+    </div>
+
+    <!-- LV1 -->
+    <div class="nav-item nav-group-open" id="nav-product-data" onclick="toggleProductMenu()">
+      <span>▣</span>
+      <span class="label">Dữ liệu Sản phẩm/Tính năng</span>
+      <span class="nav-chevron" id="productMenuChevron">⌄</span>
+    </div>
+
+    <div id="productSubmenu">
+      <!-- LV2 -->
+      <div class="nav-item sub" id="nav-products" onclick="event.stopPropagation();showPage('products')">
+        <span class="label">Sản phẩm/Tính năng MB so với đối thủ</span>
+      </div>
+
+      <!-- LV2 -->
+      <div class="nav-item sub" id="nav-matrix" onclick="event.stopPropagation();showPage('matrix')">
+        <span class="label">Ma trận chấm điểm MB so với đối thủ</span>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="topbar">
+      <div class="info-pill">ⓘ Thu thập, phân tích và so sánh thông tin sản phẩm/tính năng của các ngân hàng đối thủ</div>
+      <span>🔔</span>
+      <div class="user"><div class="avatar">NH</div><div><strong>Nguyễn Hoàng</strong><br><small style="color:#667085">Khối Chiến lược</small></div></div>
+    </div>
+
+    <section class="page" id="page-summary">
+      <div class="header">
+        <div><h1>Tổng hợp dữ liệu</h1><p>Thu thập và tổng hợp dữ liệu sản phẩm/tính năng đối thủ từ Facebook và Website</p></div>
+      </div>
+
+      <div class="card source-card">
+        <div class="source-grid">
+          <div class="source-col">
+            <h3>🔵 Nguồn Facebook</h3><p>Nhập URL fanpage chính thức của các ngân hàng</p>
+            <div id="fbSources"></div>
+            <button class="add-source" onclick="openSourceModal()">＋ Thêm nguồn</button>
+          </div>
+          <div class="divider"></div>
+          <div class="source-col">
+            <h3>🌐 Nguồn Website</h3><p>Nhập URL website chính thức của các ngân hàng</p>
+            <div id="webSources"></div>
+          </div>
+        </div>
+        <div class="range-row">
+          <div class="range-title"><span style="font-size:22px">📅</span><div><strong>Khoảng thời gian</strong><span>Chọn khoảng thời gian để cào dữ liệu</span></div></div>
+          <div class="field"><label>Từ ngày</label><input id="dateFrom" type="date" value="2024-01-01"></div>
+          <div class="field"><label>Đến ngày</label><input id="dateTo" type="date" value="2024-12-31"></div>
+          <button class="primary" id="crawlBtn" onclick="simulateCrawl()">🗄 Cào dữ liệu</button>
+        </div>
+      </div>
+
+      <div class="card section">
+        <div class="section-head"><div><h2>1. Bảng tổng hợp dữ liệu cào Facebook + Website</h2><small>Tổng hợp các tin bài, sản phẩm, tính năng thu thập được từ Facebook và Website</small></div><small id="discoveryCount"></small></div>
+        <div class="table-wrap discovery-scroll">
+          <table class="discovery-table">
+            <thead><tr><th>#</th><th>Ngày phát hiện</th><th>Ngân hàng</th><th>Nguồn (kèm link)</th><th>Tiêu đề</th><th>Cấu phần</th><th>Tính năng / Sản phẩm</th></tr></thead>
+            <tbody id="discoveryBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      </section>
+
+    <section class="page hidden" id="page-products">
+      <div class="header">
+        <div><h1>Sản phẩm/Tính năng MB so với đối thủ</h1><p>Quản lý dữ liệu sản phẩm/tính năng của MB và các ngân hàng đối thủ. Có thể thêm, sửa, xóa, import và sắp xếp linh hoạt.</p></div>
+      </div>
+
+      <div class="seed-toolbar">
+        <div class="left">
+          <button class="secondary" onclick="openGroupModal()">＋ Thêm nhóm</button>
+          <button class="secondary" onclick="openRowModal()">＋ Thêm hàng</button>
+          <button class="secondary" onclick="openColumnModal()">＋ Thêm cột</button>
+          <label class="secondary" style="display:flex;align-items:center;cursor:pointer">▣ Import từ Excel<input id="benchmarkImportInput" type="file" accept=".xlsx,.csv" style="display:none" onchange="handleExcelImport(this)"></label>
+          <button class="secondary" onclick="exportCSV()">⇧ Export CSV</button>
+          <button class="ghost" onclick="expandAll()">Expand all</button>
+          <button class="ghost" onclick="collapseAll()">Collapse all</button>
+        </div>
+        <div class="right">
+          <span style="color:#667085">Tự động lưu</span><div class="switch on" id="autosaveSwitch" onclick="toggleAutosave()"></div>
+          <button class="ghost" onclick="resetSeed()">Hủy thay đổi</button>
+          <button class="primary" style="padding:0 15px" onclick="saveSeed()">💾 Lưu thay đổi</button>
+        </div>
+      </div>
+
+      <div class="card section" style="padding:0;overflow:hidden">
+        <div class="table-wrap" style="border:0;border-radius:0">
+          <table class="seed-table">
+            <thead>
+              <tr id="seedHead"></tr>
+            </thead>
+            <tbody id="seedBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="seed-bottom">
+        <span id="seedCount"></span>
+        <span>⠿ Kéo thả Nhóm / Hàng / Cột để đổi vị trí · Điểm trống = NULL.</span>
+      </div>
+    </section>
+
+    <section class="page hidden" id="page-matrix">
+      <div class="header">
+        <div>
+          <h1>Ma trận chấm điểm MB so với đối thủ</h1>
+          <p>Ma trận được tạo trực tiếp từ dữ liệu Sản phẩm/Tính năng MB so với đối thủ.</p>
+        </div>
+      </div>
+
+      <div class="matrix-workspace">
+        <!-- LEFT: 2 position components stacked vertically -->
+        <div class="position-stack">
+          <div class="card position-card position-ranking-card">
+            <div class="position-card-head">
+              <div>
+                <h2>Xếp hạng vị thế nền tảng</h2>
+                <small>Điểm được tính trực tiếp từ toàn bộ cấu phần trong Ma trận chấm điểm.</small>
+              </div>
+            </div>
+
+            <div class="position-table-wrap">
+              <table class="position-table">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Nền tảng</th>
+                    <th>Điểm</th>
+                    <th>Chân dung điểm</th>
+                    <th>M3</th>
+                  </tr>
+                </thead>
+                <tbody id="positionRankingBody"></tbody>
+              </table>
+            </div>
+
+            <div class="position-legend">
+              <span><i class="profile-dot p3"></i> Điểm 3</span>
+              <span><i class="profile-dot p2"></i> Điểm 2</span>
+              <span><i class="profile-dot p1"></i> Điểm 1</span>
+              <span><i class="profile-dot p0"></i> Điểm 0</span>
+              <span><i class="profile-dot pn"></i> Chưa đánh giá</span>
+            </div>
+          </div>
+
+          <div class="card position-card position-radar-card">
+            <div class="position-card-head radar-head">
+              <div>
+                <h2>So sánh vị thế theo từng nhóm</h2>
+                <small>MB luôn hiển thị. Chọn tối đa 3 đối thủ để so sánh trực tiếp trên radar.</small>
+              </div>
+            </div>
+
+            <div id="radarCompareControls" class="radar-compare-controls"></div>
+            <div id="positionRadar" class="radar-container"></div>
+          </div>
+        </div>
+
+        <!-- RIGHT: detailed matrix -->
+        <div class="card section matrix-detail-card">
+          <div class="section-head matrix-section-head">
+            <div>
+              <h2>Ma trận chi tiết</h2>
+              <small>Điểm vị thế bên trái được tính tự động từ bảng này.</small>
+            </div>
+          </div>
+
+          <div class="table-wrap matrix-single-wrap matrix-right-scroll">
+            <table class="matrix-table matrix-single-table">
+              <thead><tr id="matrixHead"></tr></thead>
+              <tbody id="matrixBody"></tbody>
+            </table>
+          </div>
+
+          <div class="legend matrix-legend">
+            <strong>Thang điểm:</strong>
+            <span><b class="box s0">0</b> Chưa có</span>
+            <span><b class="box s1">1</b> Bán tự động</span>
+            <span><b class="box s2">2</b> 100% online</span>
+            <span><b class="box s3">3</b> Tính năng mới / vượt trội</span>
+            <span><b class="box">—</b> Chưa đánh giá</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="rowActionMenu" class="row-menu hidden">
+  <button id="rowMenuEdit">✎ <span>Sửa</span></button>
+  <button id="rowMenuDuplicate">⧉ <span>Nhân bản</span></button>
+  <button id="rowMenuDelete" class="danger">⌫ <span>Xóa</span></button>
+</div>
+
+<div id="modalRoot"></div>
+<div id="toastRoot"></div>
+
+<script>
+const defaultBankColumns=[
+ {key:"MB",name:"BIZ MBBank",isMB:true},
+ {key:"TCB",name:"Techcombank Business",isMB:false},
+ {key:"CTG",name:"VietinBank eFAST",isMB:false},
+ {key:"BIDV",name:"BIDV (BIDV Direct)",isMB:false},
+ {key:"VPB",name:"VPBank NEOBiz",isMB:false}
+];
+let bankColumns=JSON.parse(localStorage.getItem("mb_bank_columns")||"null")||JSON.parse(JSON.stringify(defaultBankColumns));
+let bankKeys=[];
+let bankNames={};
+function syncBankMeta(){
+  bankKeys=bankColumns.map(b=>b.key);
+  bankNames=Object.fromEntries(bankColumns.map(b=>[b.key,b.name]));
+}
+syncBankMeta();
+
+const defaultSources=[
+ {id:1,bank:"Techcombank",type:"facebook",url:"https://www.facebook.com/techcombank",verified:true},
+ {id:2,bank:"VietinBank",type:"facebook",url:"https://www.facebook.com/vietinbank",verified:true},
+ {id:3,bank:"VPBank",type:"facebook",url:"https://www.facebook.com/vpbank",verified:true},
+ {id:4,bank:"BIDV",type:"facebook",url:"https://www.facebook.com/bidv",verified:true},
+ {id:5,bank:"Vietcombank",type:"facebook",url:"https://www.facebook.com/vietcombank",verified:true},
+ {id:6,bank:"ACB",type:"facebook",url:"https://www.facebook.com/acb",verified:true},
+ {id:7,bank:"Techcombank",type:"website",url:"https://www.techcombank.com.vn",verified:true},
+ {id:8,bank:"VietinBank",type:"website",url:"https://www.vietinbank.vn",verified:true},
+ {id:9,bank:"VPBank",type:"website",url:"https://www.vpbank.com.vn",verified:true},
+ {id:10,bank:"BIDV",type:"website",url:"https://www.bidv.com.vn",verified:true},
+ {id:11,bank:"Vietcombank",type:"website",url:"https://www.vietcombank.com.vn",verified:true},
+ {id:12,bank:"ACB",type:"website",url:"https://www.acb.com.vn",verified:true},
+];
+let sources=JSON.parse(localStorage.getItem("mb_sources")||"null")||defaultSources;
+
+const discoverySeed=[
+ {date:"12/03/2024",bank:"Techcombank",type:"facebook",url:"https://www.facebook.com/techcombank",title:"Ra mắt tính năng thanh toán...",component:"Thanh toán",feature:"Apple Pay trên Techcombank"},
+ {date:"10/03/2024",bank:"VietinBank",type:"facebook",url:"https://www.facebook.com/vietinbank",title:"Ưu đãi phí chuyển tiền quốc tế",component:"Thanh toán",feature:"Chuyển tiền quốc tế"},
+ {date:"08/03/2024",bank:"VPBank",type:"website",url:"https://www.vpbank.com.vn",title:"Giải pháp tài trợ chuỗi cung ứng",component:"Tín dụng",feature:"Cấp hạn mức tín dụng"},
+ {date:"05/03/2024",bank:"BIDV",type:"website",url:"https://www.bidv.com.vn",title:"Dịch vụ nộp thuế doanh nghiệp",component:"Thanh toán",feature:"Nộp thuế / hóa đơn"},
+ {date:"03/03/2024",bank:"Vietcombank",type:"facebook",url:"https://www.facebook.com/vietcombank",title:"SME Grow - Đồng hành cùng doanh nghiệp",component:"Quản trị tài chính",feature:"SME Grow"},
+ {date:"01/03/2024",bank:"Techcombank",type:"website",url:"https://www.techcombank.com.vn",title:"Cập nhật chuyển tiền định kỳ",component:"Chuyển tiền 24/7 & theo lô",feature:"Scheduled Transfer"},
+ {date:"26/02/2024",bank:"VPBank",type:"facebook",url:"https://www.facebook.com/vpbank",title:"NEOBiz cập nhật trải nghiệm",component:"Homepage",feature:"Dashboard doanh nghiệp"},
+ {date:"22/02/2024",bank:"BIDV",type:"website",url:"https://www.bidv.com.vn",title:"Nâng cấp sao kê tài khoản",component:"Sao kê/sổ phụ",feature:"Đối chiếu tài khoản"},
+ {date:"20/02/2024",bank:"VietinBank",type:"website",url:"https://www.vietinbank.vn",title:"eFAST nâng cấp giải ngân",component:"Giải ngân online",feature:"Giải ngân số"},
+ {date:"18/02/2024",bank:"Techcombank",type:"facebook",url:"https://www.facebook.com/techcombank",title:"Tính năng quản trị thẻ",component:"Thẻ doanh nghiệp online",feature:"Card Management"},
+ {date:"14/02/2024",bank:"BIDV",type:"facebook",url:"https://www.facebook.com/bidv",title:"Ra mắt sản phẩm tiền gửi số",component:"Tiền gửi CKH online",feature:"Tiền gửi trực tuyến"},
+ {date:"10/02/2024",bank:"VPBank",type:"website",url:"https://www.vpbank.com.vn",title:"Cải tiến bảo lãnh điện tử",component:"Bảo lãnh online",feature:"eGuarantee"},
+];
+let discovery=JSON.parse(localStorage.getItem("mb_discovery")||"null")||discoverySeed;
+
+
+const seedDefault=[
+{group:"A. ONBOARDING",side:"left",feature:"Mở TK online",scores:{MB:3,TCB:1,CTG:1,BIDV:1,VPB:1},
+ MB:"Có — ~3 phút, chọn TK số đẹp\nMở tài khoản xong có thể giao dịch được ngay.\nHồ sơ mở tài khoản thiếu có thể bổ sung online",
+ TCB:"Có — ~10 phút, chọn số TK đẹp.\nMở tài khoản online cần xác minh tại quầy trước khi giao dịch\nHồ sơ thiếu cần bổ sung tại quầy",
+ CTG:"Có.\nMở tài khoản online cần xác minh tại quầy trước khi giao dịch\nHồ sơ thiếu cần bổ sung tại quầy",
+ BIDV:"Có\nMở tài khoản online cần xác minh tại quầy trước khi giao dịch\nHồ sơ thiếu cần bổ sung tại quầy",
+ VPB:"Có - ~5 phút\nMở tài khoản online cần xác minh tại quầy trước khi giao dịch\nHồ sơ thiếu cần bổ sung tại quầy"},
+{group:"B. TÀI KHOẢN & THANH TOÁN",side:"left",feature:"Homepage",scores:{MB:2,TCB:2,CTG:2,BIDV:2,VPB:2},
+ MB:"Có — có số dư (bao gồm VNĐ + ngoại tệ)\nCó dòng tiền\nCó danh sách giao dịch gần đây của Maker và Checker",
+ TCB:"Có — dashboard có:\n- số dư (bao gồm VNĐ + ngoại tệ)\n- Tổng tiền gửi\n- Tổng khoản vay\n- có dòng tiền",
+ CTG:"Có số dư, biểu đồ thu-chi theo tháng\nnhư các ví điện tử",
+ BIDV:"Có — dashboard có:\n- số dư (bao gồm VNĐ + ngoại tệ)\n- Tổng tiền gửi\n- Tổng khoản vay\n- Dòng tiền vào - ra, SK giao dịch",
+ VPB:"Có số dư, tiền gửi, khoản vay, sao kê GD gần nhất\nChưa có biểu đồ thu chi, dòng tiền"},
+{group:"B. TÀI KHOẢN & THANH TOÁN",side:"left",feature:"Sao kê/sổ phụ",scores:{MB:2,TCB:2,CTG:2,BIDV:3,VPB:2},
+ MB:"Có",TCB:"Có",CTG:"Có",BIDV:"Có, thêm các tính năng\n- Sao kê/sổ phụ\n- Xác nhận số dư từ ngân hàng\n- Đối chiếu tài khoản",VPB:"Có"},
+{group:"B. TÀI KHOẢN & THANH TOÁN",side:"left",feature:"Chuyển tiền 24/7 & theo lô",scores:{MB:2,TCB:3,CTG:2,BIDV:3,VPB:3},
+ MB:"Có — chuyển tiền nhanh 24/7, theo lô, mã citad\nChuyển ngoại tệ trong nước\nChuyển lương VND\nChưa có chuyển lương ngoại tệ\nChưa có đặt lệnh giao dịch trong tương lai\nChưa có tra soát online",
+ TCB:"Có — chuyển tiền nhanh 24/7 và theo lô,\ncó tính năng đặt lịch chuyển tiền, có tính năng yêu cầu tra soát chuyển tiền,\ncó đặt lệnh giao dịch trong tương lai",
+ CTG:"Có — qua TK 24/7 (new), tối đa 5000 GD/file, số tiền tối đa 1 GD đi ngoài hệ thống trên file 500trđ",
+ BIDV:"Có — chuyển tiền nhanh 24/7 và theo lô,\ncó tính năng đặt lịch chuyển tiền, có tính năng yêu cầu tra soát chuyển tiền,\ncó đặt lệnh giao dịch trong tương lai",
+ VPB:"Có chuyển tiền 24/7/lương/lô (giới hạn 10,000 giao dịch/file chuyển tiền theo lô)\nCó tính năng chuyển tiền định kỳ"},
+{group:"B. TÀI KHOẢN & THANH TOÁN",side:"left",feature:"Nộp thuế / hải quan / hóa đơn",scores:{MB:2,TCB:2,CTG:2,BIDV:2,VPB:2},MB:"Có",TCB:"Có",CTG:"Có",BIDV:"Có",VPB:"Có"},
+{group:"B. TÀI KHOẢN & THANH TOÁN",side:"left",feature:"Thẻ doanh nghiệp online",scores:{MB:2,TCB:3,CTG:1,BIDV:1,VPB:0},
+ MB:"Có phát hành thẻ\nCó quản trị thẻ online\nChưa có thanh toán thẻ",
+ TCB:"Có phát hành thẻ\nCó quản trị thẻ online\nCó thanh toán thẻ",
+ CTG:"Chưa có phát hành thẻ\nCó quản trị thẻ online",
+ BIDV:"Chưa có phát hành thẻ\nCó quản trị thẻ online\nCó thanh toán thẻ",
+ VPB:"Không có"},
+{group:"B. TÀI KHOẢN & THANH TOÁN",side:"left",feature:"Thanh toán quốc tế online",scores:{MB:2,TCB:3,CTG:2,BIDV:3,VPB:2},
+ MB:"Có — chuyển tiền quốc tế online, truy vấn, tra soát, bổ sung chứng từ online\nChưa cho phép thanh toán nhiều đối tác cùng lúc",
+ TCB:"Có — CTQT online, không giới hạn COT\nCho phép CTQT nhiều đối tác cùng lúc\nBổ sung chứng từ không qua cấp duyệt",
+ CTG:"Có — chuyển tiền quốc tế online, truy vấn, tra soát, bổ sung chứng từ online\nChưa cho phép thanh toán nhiều đối tác cùng lúc",
+ BIDV:"Chuyển tiền quốc tế online, truy vấn, tra soát\nBổ sung chứng từ online\nCho phép CTQT nhiều đối tác cùng lúc",
+ VPB:"Chuyển tiền quốc tế online, truy vấn, tra soát, bổ sung chứng từ online"},
+{group:"C. TIỀN GỬI VÀ ĐẦU TƯ",side:"left",feature:"Tiền gửi CKH online",scores:{MB:2,TCB:2,CTG:2,BIDV:2,VPB:2},MB:"Có",TCB:"Có",CTG:"Có",BIDV:"Có",VPB:"Có"},
+{group:"C. TIỀN GỬI VÀ ĐẦU TƯ",side:"left",feature:"Sinh lời tự động",scores:{MB:0,TCB:3,CTG:0,BIDV:3,VPB:0},MB:"Chưa có",TCB:"Có",CTG:"Chưa có",BIDV:"Có",VPB:"Chưa có"},
+{group:"C. TIỀN GỬI VÀ ĐẦU TƯ",side:"left",feature:"CDs",scores:{MB:2,TCB:2,CTG:0,BIDV:2,VPB:0},MB:"Có",TCB:"Có",CTG:"Chưa có",BIDV:"Có",VPB:"Chưa có"},
+{group:"C. TIỀN GỬI VÀ ĐẦU TƯ",side:"left",feature:"Sản phẩm đầu tư khác",scores:{MB:0,TCB:2,CTG:0,BIDV:0,VPB:0},MB:"Chưa có",TCB:"Có",CTG:"Chưa có",BIDV:"Chưa có",VPB:"Chưa có"},
+{group:"C. TÀI TRỢ THƯƠNG MẠI",side:"right",feature:"Mua bán ngoại tệ online",scores:{MB:3,TCB:2,CTG:3,BIDV:2,VPB:2},
+ MB:"Có khóa tỷ giá cố định\nCó mbeechat tỷ giá ngay trên BIZ",
+ TCB:"Có khóa tỷ giá cố định\nKhông có mbeechat realtime",
+ CTG:"Có module bảng giá giao dịch để KH theo dõi biến động tỷ giá\nKhông có mbeechat realtime",
+ BIDV:"Có khóa tỷ giá cố định\nKhông có mbeechat realtime",
+ VPB:"Có khóa tỷ giá cố định\nKhông có mbeechat realtime"},
+{group:"C. TÀI TRỢ THƯƠNG MẠI",side:"right",feature:"L/C online",scores:{MB:3,TCB:1,CTG:1,BIDV:1,VPB:1},
+ MB:"Có tư vấn, phát hành, thanh toán LC online",
+ TCB:"Có phát hành LC trong khoảng 1 giờ, chưa có tư vấn, thanh toán LC",
+ CTG:"Có phát hành LC theo hạn mức, chưa có tư vấn và thanh toán LC",
+ BIDV:"Có phát hành LC theo hạn mức, chưa có tư vấn và thanh toán LC",
+ VPB:"Có phát hành LC theo hạn mức, chưa có tư vấn và thanh toán LC"},
+{group:"D. TÍN DỤNG",side:"right",feature:"Cấp hạn mức",scores:{MB:3,TCB:2,CTG:2,BIDV:0,VPB:2},
+ MB:"1. Có đề nghị cấp hạn mức/điều chỉnh hạn mức online.\n2. Có cấp tín dụng theo quy trình preapproved trọn luồng kênh số.\n3. Có luồng ngân hàng chủ động tái cấp khi đến hạn hạn mức",
+ TCB:"1. Có đề nghị cấp hạn mức online\n2. Có hạn mức pre-approved tới 20 tỷ\n3. Chưa có luồng ngân hàng chủ động tái cấp khi đến hạn hạn mức",
+ CTG:"1. Có cấp hạn mức online\n2. Không có luồng pre tín chấp online\n3. Chưa có luồng ngân hàng chủ động tái cấp khi đến hạn hạn mức",
+ BIDV:"1. Không có cấp hạn mức online\n2. Không có luồng Preapproved online\n3. Chưa có luồng ngân hàng chủ động tái cấp khi đến hạn hạn mức",
+ VPB:"1. Có cấp hạn mức online\n2. Không có luồng pre tín chấp online\n3. Chưa có luồng ngân hàng chủ động tái cấp khi đến hạn hạn mức"},
+{group:"D. TÍN DỤNG",side:"right",feature:"Ký kết văn kiện tín dụng",scores:{MB:3,TCB:0,CTG:0,BIDV:0,VPB:1},
+ MB:"Có ký số các loại văn kiện tín dụng với doanh nghiệp (trừ văn kiện thế chấp cần công chứng) với tất cả các phương án",
+ TCB:"Chưa có",CTG:"Chưa có",BIDV:"Chưa có",
+ VPB:"Có ký số văn kiện tín dụng doanh nghiệp tuy nhiên chỉ ký được với HĐTD của sản phẩm thấu chi tín chấp"},
+{group:"D. TÍN DỤNG",side:"right",feature:"Giải ngân online",scores:{MB:3,TCB:3,CTG:2,BIDV:2,VPB:3},
+ MB:"1. Có giải ngân online\n2. Có giải ngân tự động, khách hàng nhận tiền ngay sau khi khách hàng duyệt trên nền tảng ebanking.",
+ TCB:"1. Có giải ngân online\n2. Có giải ngân tự động, khách hàng nhận tiền ngay sau khi khách hàng duyệt trên nền tảng ebanking.",
+ CTG:"1. Có giải ngân online\n2. Không có giải ngân tự động",
+ BIDV:"1. Có giải ngân online\n2. Không có giải ngân tự động",
+ VPB:"1. Có giải ngân online\n2. Có giải ngân tự động, khách hàng nhận tiền ngay sau khi khách hàng duyệt trên nền tảng ebanking."},
+{group:"D. TÍN DỤNG",side:"right",feature:"Bảo lãnh online",scores:{MB:2,TCB:2,CTG:2,BIDV:2,VPB:2},
+ MB:"1. Có bảo lãnh online\n2. Có bảo lãnh tích hợp eGP",
+ TCB:"Có phát hành bảo lãnh online trong 1–2 giờ\nCó bảo lãnh tích hợp eGP",
+ CTG:"Có bảo lãnh online\nCó bảo lãnh tích hợp eGP",
+ BIDV:"Có bảo lãnh online\nCó bảo lãnh tích hợp eGP",
+ VPB:"Có bảo lãnh online\nCó bảo lãnh tích hợp eGP"},
+{group:"E. QUẢN TRỊ TÀI CHÍNH",side:"right",feature:"360 Độ doanh nghiệp",scores:{MB:2,TCB:2,CTG:0,BIDV:2,VPB:0},
+ MB:"Giai đoạn 1: Xem thông tin doanh nghiệp: thông tin chung, danh sách người dùng BIZ, thay đổi hạn mức giao dịch\nGiai đoạn 2 (dự kiến): Upload, lưu trữ hồ sơ tài chính/pháp lý, thay đổi thông tin DN, quản trị khóa/mở user BIZ",
+ TCB:"Xem thông tin doanh nghiệp: thông tin chung, danh sách người dùng BIZ, thay đổi hạn mức giao dịch",
+ CTG:"Chưa có",
+ BIDV:"Xem thông tin doanh nghiệp: thông tin chung, danh sách người dùng BIZ, thay đổi hạn mức giao dịch",
+ VPB:"Chưa có"},
+{group:"E. QUẢN TRỊ TÀI CHÍNH",side:"right",feature:"SME Grow",scores:{MB:3,TCB:0,CTG:0,BIDV:0,VPB:0},
+ MB:"SME Grow & phân tích thị trường\nHealth check BCTC",
+ TCB:"Chưa có",CTG:"Chưa có",BIDV:"Chưa có",VPB:"Chưa có"},
+];
+let seed=JSON.parse(localStorage.getItem("mb_seed")||"null")||seedDefault;
+let collapsed={};
+let autosave=true;
+
+function saveLocal(){
+  if(autosave){
+    localStorage.setItem("mb_seed",JSON.stringify(seed));
+    localStorage.setItem("mb_sources",JSON.stringify(sources));
+    localStorage.setItem("mb_discovery",JSON.stringify(discovery));
+    localStorage.setItem("mb_bank_columns",JSON.stringify(bankColumns));
+  }
+}
+function toast(msg){
+  const r=document.getElementById("toastRoot");
+  r.innerHTML=`<div class="toast">${msg}</div>`;
+  setTimeout(()=>r.innerHTML="",1800);
+}
+let productMenuOpen=true;
+
+function toggleProductMenu(){
+  productMenuOpen=!productMenuOpen;
+  const submenu=document.getElementById("productSubmenu");
+  const parent=document.getElementById("nav-product-data");
+  const chevron=document.getElementById("productMenuChevron");
+
+  submenu.classList.toggle("collapsed",!productMenuOpen);
+  parent.classList.toggle("nav-group-open",productMenuOpen);
+  chevron.textContent=productMenuOpen?"⌄":"›";
+}
+
+function ensureProductMenuOpen(){
+  if(productMenuOpen)return;
+  productMenuOpen=true;
+  document.getElementById("productSubmenu").classList.remove("collapsed");
+  document.getElementById("nav-product-data").classList.add("nav-group-open");
+  document.getElementById("productMenuChevron").textContent="⌄";
+}
+
+function showPage(name){
+  const pages=["summary","products","matrix"];
+
+  pages.forEach(p=>{
+    document.getElementById("page-"+p)?.classList.toggle("hidden",p!==name);
+  });
+
+  document.getElementById("nav-summary")?.classList.toggle("active",name==="summary");
+  document.getElementById("nav-products")?.classList.toggle("active",name==="products");
+  document.getElementById("nav-matrix")?.classList.toggle("active",name==="matrix");
+  document.getElementById("nav-product-data")?.classList.toggle("active",name==="products"||name==="matrix");
+
+  if(name==="products" || name==="matrix")ensureProductMenuOpen();
+
+  if(name==="products")renderSeed();
+  if(name==="matrix")renderMatrix();
+}
+function sourcePairBankKey(source){
+  if(!source)return "";
+  const explicit=(source.bank||"").trim();
+  const detected=detectBank(source.url||"");
+  const bank=(explicit && explicit!=="Ngân hàng mới") ? explicit : detected;
+  if(!bank || bank==="Ngân hàng mới")return "";
+  return bank.toLowerCase().replace(/[^a-z0-9]+/g,"");
+}
+
+function ensureSourcePairIds(){
+  const bankToPair=new Map();
+
+  // Reuse existing pair IDs first.
+  sources.forEach(s=>{
+    if(!s.pairId)return;
+    const key=sourcePairBankKey(s);
+    if(key && !bankToPair.has(key))bankToPair.set(key,s.pairId);
+  });
+
+  sources.forEach((s,index)=>{
+    if(s.pairId)return;
+
+    const key=sourcePairBankKey(s);
+    let pairId=key ? bankToPair.get(key) : null;
+
+    if(!pairId){
+      pairId=`pair_${key||"source"}_${index+1}`;
+      if(key)bankToPair.set(key,pairId);
+    }
+
+    s.pairId=pairId;
+  });
+
+  // Persist migration without triggering another render.
+  localStorage.setItem("mb_sources",JSON.stringify(sources));
+}
+
+function getSourcePairs(){
+  ensureSourcePairIds();
+
+  const pairs=[];
+  const byId=new Map();
+
+  sources.forEach(source=>{
+    const pairId=source.pairId;
+    if(!byId.has(pairId)){
+      const pair={pairId,facebook:null,website:null};
+      byId.set(pairId,pair);
+      pairs.push(pair);
+    }
+    byId.get(pairId)[source.type]=source;
+  });
+
+  return pairs;
+}
+
+function getPairBankName(pair){
+  const verified=[pair.facebook,pair.website].find(s=>s?.verified && s?.bank);
+  if(verified)return verified.bank;
+
+  const named=[pair.facebook,pair.website].find(s=>s?.bank && s.bank!=="Ngân hàng mới");
+  if(named)return named.bank;
+
+  const detected=[pair.facebook,pair.website]
+    .map(s=>detectBank(s?.url||""))
+    .find(name=>name && name!=="Ngân hàng mới");
+
+  return detected||"Chưa xác định";
+}
+
+function renderSourceSide(pair,type,source,bankName,showDelete){
+  const verified=!!source?.verified;
+  const url=source?.url||"";
+  const empty=!url.trim();
+
+  return `
+    <div class="source-row ${empty?"source-row-empty":""}" data-pair-id="${escapeHtml(pair.pairId)}">
+      <div class="bank-name" title="${escapeHtml(bankName)}">${escapeHtml(bankName)}</div>
+      <div class="${verified?"ok-dot":"pending-dot"}">${verified?"✓":"?"}</div>
+
+      <input class="url-box"
+             value="${escapeHtml(url)}"
+             placeholder="${type==="facebook"?"https://facebook.com/...":"https://..."}"
+             onchange="updateSourcePairUrl('${jsq(pair.pairId)}','${type}',this.value)">
+
+      <button class="icon-btn"
+              title="Verify link"
+              onclick="verifySourcePair('${jsq(pair.pairId)}','${type}')">✓</button>
+
+      ${showDelete
+        ? `<button class="trash-btn"
+                   title="Xóa cả hàng Facebook + Website"
+                   onclick="requestDeleteSourcePair('${jsq(pair.pairId)}')">⌫</button>`
+        : `<span class="source-delete-placeholder"></span>`}
+    </div>`;
+}
+
+function renderSources(){
+  const fbRoot=document.getElementById("fbSources");
+  const webRoot=document.getElementById("webSources");
+  fbRoot.innerHTML="";
+  webRoot.innerHTML="";
+
+  getSourcePairs().forEach(pair=>{
+    const bankName=getPairBankName(pair);
+
+    fbRoot.insertAdjacentHTML(
+      "beforeend",
+      renderSourceSide(pair,"facebook",pair.facebook,bankName,false)
+    );
+
+    webRoot.insertAdjacentHTML(
+      "beforeend",
+      renderSourceSide(pair,"website",pair.website,bankName,true)
+    );
+  });
+}
+
+function nextSourceId(){
+  return Math.max(0,...sources.map(x=>Number(x.id)||0))+1;
+}
+
+function findPairSource(pairId,type){
+  return sources.find(s=>s.pairId===pairId && s.type===type);
+}
+
+function updateSourcePairUrl(pairId,type,url){
+  let source=findPairSource(pairId,type);
+
+  if(!source){
+    const pair=getSourcePairs().find(p=>p.pairId===pairId);
+    const bank=pair ? getPairBankName(pair) : "";
+
+    source={
+      id:nextSourceId(),
+      pairId,
+      bank:bank==="Chưa xác định"?"":bank,
+      type,
+      url:"",
+      verified:false
+    };
+    sources.push(source);
+  }
+
+  source.url=url.trim();
+  source.verified=false;
+
+  saveLocal();
+  renderSources();
+}
+
+function detectBank(url){
+  const u=(url||"").toLowerCase();
+  if(u.includes("techcom"))return "Techcombank";
+  if(u.includes("vietin"))return "VietinBank";
+  if(u.includes("vpbank"))return "VPBank";
+  if(u.includes("bidv"))return "BIDV";
+  if(u.includes("vietcom"))return "Vietcombank";
+  if(u.includes("acb"))return "ACB";
+  if(u.includes("tpbank")||u.includes("tpb"))return "TPBank";
+  if(u.includes("agribank"))return "Agribank";
+  if(u.includes("vietbank"))return "Vietbank";
+  return "Ngân hàng mới";
+}
+
+function verifySourcePair(pairId,type){
+  const source=findPairSource(pairId,type);
+
+  if(!source || !source.url.trim()){
+    toast("Chưa có URL để xác thực");
+    return;
+  }
+
+  if(!/^https?:\/\//i.test(source.url)){
+    toast("URL chưa hợp lệ");
+    return;
+  }
+
+  const detectedBank=detectBank(source.url);
+  source.verified=true;
+  source.bank=detectedBank;
+
+  // A pair represents one bank. Keep both Facebook and Website on the same row/name.
+  sources
+    .filter(s=>s.pairId===pairId)
+    .forEach(s=>{s.bank=detectedBank;});
+
+  saveLocal();
+  renderSources();
+  toast("Đã verify link và nhận diện "+detectedBank);
+}
+
+/* Backward-compatible wrappers for any old inline references */
+function updateSourceUrl(id,url){
+  const source=sources.find(s=>s.id===id);
+  if(source)updateSourcePairUrl(source.pairId,source.type,url);
+}
+function verifySource(id){
+  const source=sources.find(s=>s.id===id);
+  if(source)verifySourcePair(source.pairId,source.type);
+}
+function deleteSource(id){
+  const source=sources.find(s=>s.id===id);
+  if(source)requestDeleteSourcePair(source.pairId);
+}
+
+function requestDeleteSourcePair(pairId){
+  const pair=getSourcePairs().find(p=>p.pairId===pairId);
+  if(!pair)return;
+
+  const bankName=getPairBankName(pair);
+
+  modal(`
+    <h3>Xóa nguồn ngân hàng</h3>
+    <div class="confirm-box">
+      Bạn có chắc muốn xóa hàng nguồn của <b>${escapeHtml(bankName)}</b>?
+    </div>
+    <div class="confirm-warning">
+      Cả <b>Facebook</b> và <b>Website</b> trong cùng hàng sẽ được xóa đồng thời.
+    </div>
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">Hủy</button>
+      <button class="primary"
+              style="padding:0 16px;background:#e5484d"
+              onclick="confirmDeleteSourcePair('${jsq(pairId)}')">Xóa hàng</button>
+    </div>
+  `);
+}
+
+function confirmDeleteSourcePair(pairId){
+  sources=sources.filter(s=>s.pairId!==pairId);
+  saveLocal();
+  closeModal();
+  renderSources();
+  toast("Đã xóa cả nguồn Facebook và Website");
+}
+
+function openSourceModal(){
+  modal(`
+    <h3>Thêm nguồn ngân hàng</h3>
+
+    <div class="modal-grid">
+      <div class="field">
+        <label>Facebook URL</label>
+        <input id="mFb" placeholder="https://facebook.com/...">
+      </div>
+
+      <div class="field">
+        <label>Website URL</label>
+        <input id="mWeb" placeholder="https://...">
+      </div>
+    </div>
+
+    <div class="source-pair-note">
+      Một lần thêm = <b>một hàng ngân hàng</b>. Facebook và Website luôn đi cùng một hàng.
+      Có thể để trống một nguồn nếu chưa có URL và bổ sung sau.
+    </div>
+
+    <div class="modal-actions">
+      <button class="ghost" onclick="closeModal()">Hủy</button>
+      <button class="primary"
+              style="padding:0 16px"
+              onclick="addSourceFromModal()">Thêm hàng nguồn</button>
+    </div>
+  `);
+}
+
+function addSourceFromModal(){
+  const fb=document.getElementById("mFb").value.trim();
+  const web=document.getElementById("mWeb").value.trim();
+
+  if(!fb && !web){
+    toast("Nhập ít nhất một URL");
+    return;
+  }
+
+  let id=nextSourceId();
+  const pairId=`pair_${Date.now()}_${id}`;
+
+  const detected=
+    [fb,web]
+      .filter(Boolean)
+      .map(detectBank)
+      .find(name=>name && name!=="Ngân hàng mới") || "";
+
+  // Always create BOTH sides so the two source columns stay as one logical row.
+  sources.push({
+    id:id++,
+    pairId,
+    bank:detected,
+    type:"facebook",
+    url:fb,
+    verified:false
+  });
+
+  sources.push({
+    id:id++,
+    pairId,
+    bank:detected,
+    type:"website",
+    url:web,
+    verified:false
+  });
+
+  saveLocal();
+  closeModal();
+  renderSources();
+  toast("Đã thêm 1 hàng nguồn Facebook + Website");
+}
+
+function simulateCrawl(){
+ const btn=document.getElementById("crawlBtn");
+ btn.disabled=true; let n=0;
+ const total=Math.max(1,sources.filter(s=>String(s.url||"").trim()).length);
+ const timer=setInterval(()=>{
+   n++;
+   btn.textContent=`Đang xử lý ${Math.min(n,total)}/${total}...`;
+   if(n>=total){
+     clearInterval(timer);
+     btn.disabled=false;btn.textContent="🗄 Cào dữ liệu";
+     discovery.unshift({date:new Date().toLocaleDateString("vi-VN"),bank:"Techcombank",type:"website",url:"https://www.techcombank.com.vn",title:"Phát hiện thay đổi nội dung sản phẩm mới",component:"Chuyển tiền 24/7 & theo lô",feature:"Feature mới vừa được phát hiện"});
+     saveLocal();renderDiscovery();toast("Cào dữ liệu hoàn tất");
+   }
+ },160);
+}
+function renderDiscovery(){
+ const rows=discovery;
+
+ document.getElementById("discoveryBody").innerHTML=rows.map((r,i)=>`
+ <tr onclick="openDiscoveryDrawer(${i})" style="cursor:pointer">
+   <td>${i+1}</td>
+   <td>${r.date}</td>
+   <td>${r.bank}</td>
+   <td>
+     <a class="source-link" href="${escapeHtml(r.url)}" target="_blank" onclick="event.stopPropagation()">
+       ${r.type==="facebook"?"🔵 Facebook":"🌐 Website"}
+     </a>
+   </td>
+   <td>${escapeHtml(r.title)}</td>
+   <td>${escapeHtml(r.component)}</td>
+   <td>${escapeHtml(r.feature)}</td>
+ </tr>`).join("");
+
+ document.getElementById("discoveryCount").textContent=
+   discovery.length<=10
+     ? `Hiển thị ${discovery.length}/${discovery.length} dòng`
+     : `Hiển thị 10 dòng · Cuộn để xem ${discovery.length-10} dòng còn lại`;
+}
+function openDiscoveryDrawer(i){
+ const r=discovery[i];
+ modal(`<h3>${r.bank} — ${r.feature}</h3>
+ <div class="modal-grid">
+ <div><b>Ngày phát hiện</b><p>${r.date}</p></div><div><b>Nguồn</b><p><a href="${r.url}" target="_blank">${r.type}</a></p></div>
+ <div><b>Cấu phần</b><p>${r.component}</p></div><div><b>Tiêu đề</b><p>${r.title}</p></div>
+ </div>
+ <div class="field"><label>AI Summary</label><textarea rows="4">Phát hiện nội dung có liên quan đến sản phẩm/tính năng doanh nghiệp. Cần đối chiếu với Initial Benchmark Seed trước khi cập nhật điểm.</textarea></div>
+ <div class="modal-actions"><button class="ghost" onclick="closeModal()">Đóng</button><button class="secondary" onclick="closeModal();toast('Đã đánh dấu không liên quan')">Không liên quan</button><button class="primary" style="padding:0 16px" onclick="closeModal();toast('Đã chấp nhận dữ liệu')">Chấp nhận</button></div>`);
+}
+
+function groupOrder(){
+ const arr=[]; seed.forEach(r=>{if(!arr.includes(r.group))arr.push(r.group)}); return arr;
+}
+function renderSeed(){
+ closeRowActionMenu();
+ const root=document.getElementById("seedBody");
+ const head=document.getElementById("seedHead");
+ root.innerHTML="";
+
+ head.innerHTML=`<th>Nhóm / Tính năng</th>`+
+   bankColumns.map((b,idx)=>`
+     <th
+       data-column-index="${idx}"
+       ondragover="handleColumnDragOver(event,${idx},this)"
+       ondragleave="clearDragTarget(this)"
+       ondrop="handleColumnDrop(event,${idx},this)">
+       <div class="column-head-wrap">
+         <span class="drag-handle"
+               draggable="true"
+               title="Kéo để đổi vị trí cột"
+               ondragstart="startColumnDrag(event,${idx},this)"
+               ondragend="endDrag()">⠿</span>
+         <span class="column-label-actions">
+           <span class="column-head-name">${escapeHtml(b.name)}</span>
+           <span class="column-head-actions">
+             <button class="column-head-btn" title="Sửa tên cột" onclick="editBankColumn(${idx})">✎</button>
+             ${b.isMB
+               ? `<button class="column-head-btn" title="Cột MB không thể xóa" disabled>⌫</button>`
+               : `<button class="column-head-btn danger" title="Xóa cột" onclick="requestDeleteBankColumn(${idx})">⌫</button>`}
+           </span>
+         </span>
+       </div>
+     </th>`).join("")+
+   `<th>Thao tác</th>`;
+
+ const colCount=bankColumns.length+2;
+
+ groupOrder().forEach((group,groupIndex)=>{
+   const gRows=seed.filter(r=>r.group===group);
+
+   root.insertAdjacentHTML("beforeend",`
+     <tr class="group-row"
+         data-group-index="${groupIndex}"
+         ondragover="handleGroupDragOver(event,${groupIndex},this)"
+         ondragleave="clearDragTarget(this)"
+         ondrop="handleGroupDrop(event,${groupIndex},this)">
+       <td colspan="${colCount}">
+         <div class="group-row-wrap">
+           <div class="group-row-main">
+             <span class="drag-handle"
+                   draggable="true"
+                   title="Kéo để đổi vị trí nhóm"
+                   ondragstart="startGroupDrag(event,${groupIndex},this)"
+                   ondragend="endDrag()">⠿</span>
+             <span class="group-toggle" onclick="toggleGroup('${jsq(group)}')">${collapsed[group]?"▶":"▼"}</span>
+             <span class="group-label-actions">
+               <span class="group-name-text">${escapeHtml(group)}</span>
+               <span style="color:#6b7ca5;font-weight:500">(${gRows.length})</span>
+               <span class="group-actions">
+                 <button class="group-action-btn" title="Sửa nhóm" onclick="editGroupByIndex(${groupIndex})">✎</button>
+                 <button class="group-action-btn danger" title="Xóa nhóm và toàn bộ hàng thuộc nhóm" onclick="requestDeleteGroup(${groupIndex})">⌫</button>
+               </span>
+             </span>
+           </div>
+         </div>
+       </td>
+     </tr>`);
+
+   if(!collapsed[group]){
+     gRows.forEach(r=>{
+       const idx=seed.indexOf(r);
+       root.insertAdjacentHTML("beforeend",`
+       <tr data-seed-index="${idx}"
+           ondragover="handleRowDragOver(event,${idx},this)"
+           ondragleave="clearDragTarget(this)"
+           ondrop="handleRowDrop(event,${idx},this)">
+         <td class="feature-name">
+           <div class="feature-cell-wrap">
+             <span class="drag-handle"
+                   draggable="true"
+                   title="Kéo để đổi vị trí hàng"
+                   ondragstart="startRowDrag(event,${idx},this)"
+                   ondragend="endDrag()">⠿</span>
+             <span class="feature-cell-text">${escapeHtml(r.feature)}</span>
+           </div>
+         </td>
+         ${bankKeys.map(k=>`<td>${nl2br(r[k]||"")}</td>`).join("")}
+         <td>
+           <div class="row-action-cell">
+             <button class="more-btn" title="Thao tác" onclick="event.stopPropagation();openRowActionMenu(${idx},this)">...</button>
+           </div>
+         </td>
+       </tr>`);
+     });
+   }
+ });
+
+ document.getElementById("seedCount").textContent=`Hiện có ${seed.length} cấu phần benchmark trong ${groupOrder().length} nhóm và ${bankColumns.length} cột ngân hàng.`;
+}
+
+
+/* ===== Drag & Drop state ===== */
+let dragState=null;
+
+function setDragTransfer(event,payload){
+ dragState=payload;
+ try{
+   event.dataTransfer.effectAllowed="move";
+   event.dataTransfer.setData("text/plain",JSON.stringify(payload));
+ }catch(e){}
+ const source=event.target.closest("tr,th");
+ if(source)source.classList.add("drag-source");
+ closeRowActionMenu();
+}
+
+function startGroupDrag(event,groupIndex){
+ event.stopPropagation();
+ setDragTransfer(event,{type:"group",groupIndex});
+}
+
+function startRowDrag(event,seedIndex){
+ event.stopPropagation();
+ setDragTransfer(event,{type:"row",seedIndex});
+}
+
+function startColumnDrag(event,columnIndex){
+ event.stopPropagation();
+ setDragTransfer(event,{type:"column",columnIndex});
+}
+
+function endDrag(){
+ document.querySelectorAll(".drag-source,.drag-over-before,.drag-over-after").forEach(el=>{
+   el.classList.remove("drag-source","drag-over-before","drag-over-after");
+ });
+ dragState=null;
+}
+
+function clearDragTarget(el){
+ if(!el)return;
+ el.classList.remove("drag-over-before","drag-over-after");
+}
+
+function dropSide(event,el,axis="y"){
+ const rect=el.getBoundingClientRect();
+ if(axis==="x")return event.clientX < rect.left+rect.width/2 ? "before" : "after";
+ return event.clientY < rect.top+rect.height/2 ? "before" : "after";
+}
+
+function markDropTarget(event,el,axis="y"){
+ event.preventDefault();
+ if(!dragState)return null;
+ try{event.dataTransfer.dropEffect="move"}catch(e){}
+ const side=dropSide(event,el,axis);
+ el.classList.toggle("drag-over-before",side==="before");
+ el.classList.toggle("drag-over-after",side==="after");
+ return side;
+}
+
+/* ----- Columns ----- */
+function handleColumnDragOver(event,targetIndex,el){
+ if(!dragState || dragState.type!=="column")return;
+ markDropTarget(event,el,"x");
+}
+
+function handleColumnDrop(event,targetIndex,el){
+ event.preventDefault();
+ if(!dragState || dragState.type!=="column"){endDrag();return;}
+
+ const fromIndex=dragState.columnIndex;
+ const side=dropSide(event,el,"x");
+ clearDragTarget(el);
+
+ if(fromIndex===targetIndex){endDrag();return;}
+
+ const moving=bankColumns[fromIndex];
+ const target=bankColumns[targetIndex];
+ const next=bankColumns.filter((_,i)=>i!==fromIndex);
+ let insertAt=next.indexOf(target);
+ if(insertAt<0)insertAt=next.length;
+ if(side==="after")insertAt++;
+
+ next.splice(insertAt,0,moving);
+ bankColumns=next;
+ syncBankMeta();
+ saveLocal();
+ endDrag();
+ renderSeed();
+ renderMatrix();
+ toast("Đã thay đổi vị trí cột");
+}
+
+/* ----- Groups ----- */
+function handleGroupDragOver(event,targetGroupIndex,el){
+ if(!dragState)return;
+ if(dragState.type!=="group" && dragState.type!=="row")return;
+ markDropTarget(event,el,"y");
+}
+
+function handleGroupDrop(event,targetGroupIndex,el){
+ event.preventDefault();
+ if(!dragState){endDrag();return;}
+
+ const side=dropSide(event,el,"y");
+ clearDragTarget(el);
+
+ if(dragState.type==="group"){
+   reorderGroup(dragState.groupIndex,targetGroupIndex,side);
+ }else if(dragState.type==="row"){
+   moveRowToGroup(dragState.seedIndex,targetGroupIndex,side);
+ }else{
+   endDrag();
+ }
+}
+
+function reorderGroup(fromGroupIndex,targetGroupIndex,side){
+ const groups=groupOrder();
+ const fromGroup=groups[fromGroupIndex];
+ const targetGroup=groups[targetGroupIndex];
+
+ if(!fromGroup || !targetGroup || fromGroup===targetGroup){endDrag();return;}
+
+ const movingRows=seed.filter(r=>r.group===fromGroup);
+ const remaining=seed.filter(r=>r.group!==fromGroup);
+
+ const targetRows=remaining.filter(r=>r.group===targetGroup);
+ let insertAt;
+
+ if(!targetRows.length){
+   insertAt=remaining.length;
+ }else if(side==="before"){
+   insertAt=remaining.indexOf(targetRows[0]);
+ }else{
+   insertAt=remaining.indexOf(targetRows[targetRows.length-1])+1;
+ }
+
+ remaining.splice(insertAt,0,...movingRows);
+ seed=remaining;
+ saveLocal();
+ endDrag();
+ renderSeed();
+ renderMatrix();
+ toast("Đã thay đổi vị trí nhóm");
+}
+
+function moveRowToGroup(seedIndex,targetGroupIndex,side){
+ const groups=groupOrder();
+ const targetGroup=groups[targetGroupIndex];
+ const row=seed[seedIndex];
+
+ if(!row || !targetGroup){endDrag();return;}
+
+ const targetSide=seed.find(r=>r.group===targetGroup)?.side || row.side || "left";
+ const moving=row;
+ const remaining=seed.filter((_,i)=>i!==seedIndex);
+
+ moving.group=targetGroup;
+ moving.side=targetSide;
+
+ const targetRows=remaining.filter(r=>r.group===targetGroup);
+ let insertAt;
+
+ if(!targetRows.length){
+   insertAt=remaining.length;
+ }else if(side==="before"){
+   insertAt=remaining.indexOf(targetRows[0]);
+ }else{
+   insertAt=remaining.indexOf(targetRows[targetRows.length-1])+1;
+ }
+
+ remaining.splice(insertAt,0,moving);
+ seed=remaining;
+ saveLocal();
+ endDrag();
+ renderSeed();
+ renderMatrix();
+ toast("Đã chuyển hàng sang nhóm");
+}
+
+/* ----- Rows ----- */
+function handleRowDragOver(event,targetSeedIndex,el){
+ if(!dragState || dragState.type!=="row")return;
+ markDropTarget(event,el,"y");
+}
+
+function handleRowDrop(event,targetSeedIndex,el){
+ event.preventDefault();
+ if(!dragState || dragState.type!=="row"){endDrag();return;}
+
+ const fromIndex=dragState.seedIndex;
+ const side=dropSide(event,el,"y");
+ clearDragTarget(el);
+
+ if(fromIndex===targetSeedIndex){endDrag();return;}
+
+ const moving=seed[fromIndex];
+ const target=seed[targetSeedIndex];
+ if(!moving || !target){endDrag();return;}
+
+ const remaining=seed.filter((_,i)=>i!==fromIndex);
+ const targetPos=remaining.indexOf(target);
+ if(targetPos<0){endDrag();return;}
+
+ moving.group=target.group;
+ moving.side=target.side;
+
+ let insertAt=targetPos+(side==="after"?1:0);
+ remaining.splice(insertAt,0,moving);
+ seed=remaining;
+
+ saveLocal();
+ endDrag();
+ renderSeed();
+ renderMatrix();
+ toast("Đã thay đổi vị trí hàng");
+}
+
+let activeRowMenuIndex=null;
+
+function openRowActionMenu(index,button){
+ const menu=document.getElementById("rowActionMenu");
+ if(!menu)return;
+
+ activeRowMenuIndex=index;
+
+ const rect=button.getBoundingClientRect();
+ const menuWidth=170;
+ const estimatedHeight=126;
+
+ let left=rect.right-menuWidth;
+ let top=rect.bottom+6;
+
+ if(left<8)left=8;
+ if(left+menuWidth>window.innerWidth-8)left=window.innerWidth-menuWidth-8;
+ if(top+estimatedHeight>window.innerHeight-8)top=Math.max(8,rect.top-estimatedHeight-6);
+
+ menu.style.left=left+"px";
+ menu.style.top=top+"px";
+ menu.classList.remove("hidden");
+
+ document.getElementById("rowMenuEdit").onclick=(e)=>{
+   e.stopPropagation();
+   closeRowActionMenu();
+   editSeedRow(index);
+ };
+ document.getElementById("rowMenuDuplicate").onclick=(e)=>{
+   e.stopPropagation();
+   closeRowActionMenu();
+   duplicateSeedRow(index);
+ };
+ document.getElementById("rowMenuDelete").onclick=(e)=>{
+   e.stopPropagation();
+   closeRowActionMenu();
+   deleteSeedRow(index);
+ };
+}
+
+function closeRowActionMenu(){
+ const menu=document.getElementById("rowActionMenu");
+ if(menu)menu.classList.add("hidden");
+ activeRowMenuIndex=null;
+}
+
+document.addEventListener("click",(e)=>{
+ const menu=document.getElementById("rowActionMenu");
+ if(!menu || menu.classList.contains("hidden"))return;
+ if(!menu.contains(e.target))closeRowActionMenu();
+});
+
+window.addEventListener("resize",closeRowActionMenu);
+window.addEventListener("scroll",closeRowActionMenu,true);
+
+function toggleGroup(group){collapsed[group]=!collapsed[group];renderSeed();}
+function expandAll(){groupOrder().forEach(g=>collapsed[g]=false);renderSeed();}
+function collapseAll(){groupOrder().forEach(g=>collapsed[g]=true);renderSeed();}
+function toggleAutosave(){autosave=!autosave;document.getElementById("autosaveSwitch").classList.toggle("on",autosave);toast(autosave?"Đã bật tự động lưu":"Đã tắt tự động lưu");}
+function saveSeed(){localStorage.setItem("mb_seed",JSON.stringify(seed));localStorage.setItem("mb_bank_columns",JSON.stringify(bankColumns));renderMatrix();toast("Đã lưu thay đổi");}
+function resetSeed(){if(confirm("Khôi phục seed mặc định?")){seed=JSON.parse(JSON.stringify(seedDefault));bankColumns=JSON.parse(JSON.stringify(defaultBankColumns));syncBankMeta();localStorage.setItem("mb_seed",JSON.stringify(seed));localStorage.setItem("mb_bank_columns",JSON.stringify(bankColumns));renderSeed();renderMatrix();}}
+function duplicateSeedRow(i){const c=JSON.parse(JSON.stringify(seed[i]));c.feature+=" (copy)";seed.splice(i+1,0,c);saveLocal();renderSeed();toast("Đã nhân bản cấu phần");}
+function deleteSeedRow(i){
+ const row=seed[i];
+ if(!row)return;
+ modal(`
+   <h3>Xóa cấu phần</h3>
+   <div class="confirm-box">Bạn có chắc muốn xóa cấu phần <b>${escapeHtml(row.feature||"Chưa đặt tên")}</b>?</div>
+   <div class="modal-actions">
+     <button class="ghost" onclick="closeModal()">Hủy</button>
+     <button class="primary" style="padding:0 16px;background:#e5484d" onclick="confirmDeleteSeedRow(${i})">Xóa</button>
+   </div>`);
+}
+function confirmDeleteSeedRow(i){
+ if(!seed[i]){closeModal();return;}
+ seed.splice(i,1);
+ saveLocal();
+ closeModal();
+ renderSeed();
+ renderMatrix();
+ toast("Đã xóa cấu phần");
+}
+function openRowModal(){editSeedRow(-1);}
+function editSeedRow(i){
+ let r;
+ if(i>=0){
+   r=seed[i];
+ }else{
+   r={group:groupOrder()[0]||"A. ONBOARDING",side:"left",feature:"",scores:{}};
+   bankKeys.forEach(k=>{r[k]="";r.scores[k]=null;});
+ }
+
+ modal(`
+ <div class="component-editor-modal">
+   <h3>${i>=0?"Sửa cấu phần":"Thêm cấu phần"}</h3>
+
+   <div class="modal-grid">
+     <div class="field">
+       <label>Nhóm / Journey</label>
+       <select id="eGroup">
+         ${groupOrder().map(g=>`<option ${g===r.group?"selected":""}>${escapeHtml(g)}</option>`).join("")}
+       </select>
+     </div>
+
+     <div class="field">
+       <label>Tên cấu phần</label>
+       <input id="eFeature" value="${attr(r.feature)}" placeholder="Nhập tên cấu phần">
+     </div>
+   </div>
+
+   <div class="component-editor-body">
+     <div class="component-editor-list">
+       ${bankKeys.map(k=>`
+         <div class="component-bank-row">
+           <div class="component-bank-desc">
+             <label><span class="component-bank-name">${escapeHtml(bankNames[k])}</span> — Mô tả</label>
+             <textarea id="e_${k}" rows="4" placeholder="Nhập mô tả sản phẩm/tính năng...">${escapeHtml(r[k]||"")}</textarea>
+           </div>
+
+           <div class="component-bank-score">
+             <label>Điểm</label>
+             <input id="s_${k}"
+                    type="number"
+                    min="0"
+                    max="3"
+                    step="1"
+                    placeholder="NULL"
+                    value="${r.scores?.[k]??""}">
+             <div class="score-helper">
+               0 = Chưa có<br>
+               1 = Bán tự động<br>
+               2 = 100% online<br>
+               3 = Vượt trội<br>
+               Trống = NULL
+             </div>
+           </div>
+         </div>
+       `).join("")}
+     </div>
+   </div>
+
+   <div class="modal-actions">
+     <button class="ghost" onclick="closeModal()">Hủy</button>
+     <button class="primary" style="padding:0 16px" onclick="saveRowModal(${i})">Lưu</button>
+   </div>
+ </div>`);
+}
+function saveRowModal(i){
+ const obj={group:document.getElementById("eGroup").value,side:(document.getElementById("eGroup").value.startsWith("A.")||document.getElementById("eGroup").value.startsWith("B.")||document.getElementById("eGroup").value.includes("TIỀN GỬI"))?"left":"right",feature:document.getElementById("eFeature").value.trim(),scores:{}};
+ if(!obj.feature){toast("Nhập tên cấu phần");return;}
+ bankKeys.forEach(k=>{
+   obj[k]=document.getElementById("e_"+k).value;
+   const v=document.getElementById("s_"+k).value;
+   obj.scores[k]=v===""?null:Math.max(0,Math.min(3,Number(v)));
+ });
+ if(i>=0)seed[i]=obj; else seed.push(obj);
+ saveLocal();closeModal();renderSeed();renderMatrix();toast("Đã cập nhật cấu phần");
+}
+function openGroupModal(){
+ modal(`<h3>Thêm nhóm Journey</h3>
+ <div class="modal-grid"><div class="field"><label>Tên nhóm</label><input id="gName" placeholder="F. NHÓM MỚI"></div><div class="field"><label>Vị trí Matrix</label><select id="gSide"><option value="left">Bảng trái</option><option value="right">Bảng phải</option></select></div></div>
+ <div class="modal-actions"><button class="ghost" onclick="closeModal()">Hủy</button><button class="primary" style="padding:0 16px" onclick="createGroup()">Tạo nhóm</button></div>`);
+}
+function createGroup(){
+ const g=document.getElementById("gName").value.trim();
+ if(!g){toast("Nhập tên nhóm");return;}
+ if(groupOrder().includes(g)){toast("Tên nhóm đã tồn tại");return;}
+
+ const row={
+   group:g,
+   side:document.getElementById("gSide").value,
+   feature:"Cấu phần mới",
+   scores:{}
+ };
+ bankKeys.forEach(k=>{row[k]="";row.scores[k]=null;});
+
+ seed.push(row);
+ saveLocal();
+ closeModal();
+ renderSeed();
+ renderMatrix();
+}
+
+function editGroupByIndex(groupIndex){
+ const group=groupOrder()[groupIndex];
+ if(!group)return;
+ const first=seed.find(r=>r.group===group);
+ if(!first)return;
+
+ modal(`
+ <h3>Sửa nhóm Journey</h3>
+ <div class="modal-grid">
+   <div class="field">
+     <label>Tên nhóm</label>
+     <input id="editGroupName" value="${attr(group)}">
+   </div>
+   <div class="field">
+     <label>Vị trí Matrix</label>
+     <select id="editGroupSide">
+       <option value="left" ${first.side==="left"?"selected":""}>Bảng trái</option>
+       <option value="right" ${first.side==="right"?"selected":""}>Bảng phải</option>
+     </select>
+   </div>
+ </div>
+ <div class="modal-actions">
+   <button class="ghost" onclick="closeModal()">Hủy</button>
+   <button class="primary" style="padding:0 16px" onclick="saveGroupEditByIndex(${groupIndex})">Lưu</button>
+ </div>`);
+}
+
+function saveGroupEditByIndex(groupIndex){
+ const oldGroup=groupOrder()[groupIndex];
+ if(!oldGroup){closeModal();return;}
+
+ const newName=document.getElementById("editGroupName").value.trim();
+ const newSide=document.getElementById("editGroupSide").value;
+
+ if(!newName){toast("Nhập tên nhóm");return;}
+ if(newName!==oldGroup && groupOrder().includes(newName)){toast("Tên nhóm đã tồn tại");return;}
+
+ seed.forEach(r=>{
+   if(r.group===oldGroup){
+     r.group=newName;
+     r.side=newSide;
+   }
+ });
+
+ if(collapsed[oldGroup]!==undefined){
+   collapsed[newName]=collapsed[oldGroup];
+   if(newName!==oldGroup)delete collapsed[oldGroup];
+ }
+ if(collapsed["m_"+oldGroup]!==undefined){
+   collapsed["m_"+newName]=collapsed["m_"+oldGroup];
+   if(newName!==oldGroup)delete collapsed["m_"+oldGroup];
+ }
+
+ saveLocal();
+ closeModal();
+ renderSeed();
+ renderMatrix();
+ toast("Đã cập nhật nhóm");
+}
+
+function requestDeleteGroup(groupIndex){
+ const group=groupOrder()[groupIndex];
+ if(!group)return;
+ const count=seed.filter(r=>r.group===group).length;
+
+ modal(`
+   <h3>Xóa nhóm</h3>
+   <div class="confirm-box">
+     Bạn có chắc muốn xóa nhóm <b>${escapeHtml(group)}</b>?
+   </div>
+   <div class="confirm-warning">
+     Toàn bộ <b>${count} hàng/cấu phần</b> thuộc nhóm này cũng sẽ bị xóa tự động.
+   </div>
+   <div class="modal-actions">
+     <button class="ghost" onclick="closeModal()">Hủy</button>
+     <button class="primary" style="padding:0 16px;background:#e5484d" onclick="confirmDeleteGroup(${groupIndex})">Xóa nhóm</button>
+   </div>`);
+}
+
+function confirmDeleteGroup(groupIndex){
+ const group=groupOrder()[groupIndex];
+ if(!group){closeModal();return;}
+
+ const count=seed.filter(r=>r.group===group).length;
+ seed=seed.filter(r=>r.group!==group);
+ delete collapsed[group];
+ delete collapsed["m_"+group];
+
+ saveLocal();
+ closeModal();
+ renderSeed();
+ renderMatrix();
+ toast(`Đã xóa nhóm và ${count} hàng thuộc nhóm`);
+}
+
+function normalizeColumnKey(value){
+ return String(value||"")
+   .toUpperCase()
+   .normalize("NFD")
+   .replace(/[\u0300-\u036f]/g,"")
+   .replace(/[^A-Z0-9]+/g,"_")
+   .replace(/^_+|_+$/g,"")
+   .slice(0,12);
+}
+
+function openColumnModal(){
+ modal(`
+ <h3>Thêm cột ngân hàng</h3>
+ <div class="modal-grid">
+   <div class="field">
+     <label>Tên cột / Ngân hàng</label>
+     <input id="newColumnName" placeholder="VD: Vietcombank DigiBiz">
+   </div>
+   <div class="field">
+     <label>Mã viết tắt</label>
+     <input id="newColumnKey" placeholder="VD: VCB">
+   </div>
+ </div>
+ <div style="margin-top:10px;color:#667085;font-size:12px">
+   Cột mới sẽ được thêm vào bảng Initial Benchmark Seed và tự động xuất hiện trong Ma trận chấm điểm. Các ô ban đầu để trống / NULL.
+ </div>
+ <div class="modal-actions">
+   <button class="ghost" onclick="closeModal()">Hủy</button>
+   <button class="primary" style="padding:0 16px" onclick="createBankColumn()">Thêm cột</button>
+ </div>`);
+}
+
+function createBankColumn(){
+ const name=document.getElementById("newColumnName").value.trim();
+ let key=normalizeColumnKey(document.getElementById("newColumnKey").value || name);
+
+ if(!name){toast("Nhập tên cột / ngân hàng");return;}
+ if(!key){toast("Nhập mã viết tắt");return;}
+ if(bankColumns.some(b=>b.key===key)){toast("Mã cột đã tồn tại");return;}
+
+ bankColumns.push({key,name,isMB:false});
+ syncBankMeta();
+
+ seed.forEach(r=>{
+   r[key]="";
+   r.scores=r.scores||{};
+   r.scores[key]=null;
+ });
+
+ saveLocal();
+ closeModal();
+ renderSeed();
+ renderMatrix();
+ toast("Đã thêm cột "+name);
+}
+
+function editBankColumn(index){
+ const col=bankColumns[index];
+ if(!col)return;
+
+ modal(`
+   <h3>Sửa tên cột</h3>
+   <div class="modal-grid">
+     <div class="field">
+       <label>Tên cột / Ngân hàng</label>
+       <input id="editColumnName" value="${attr(col.name)}">
+     </div>
+     <div class="field">
+       <label>Mã viết tắt</label>
+       <input value="${attr(col.key)}" disabled>
+     </div>
+   </div>
+   <div style="margin-top:10px;color:#667085;font-size:12px">
+     Đổi tên cột không làm mất dữ liệu mô tả hoặc điểm đang có trong cột.
+   </div>
+   <div class="modal-actions">
+     <button class="ghost" onclick="closeModal()">Hủy</button>
+     <button class="primary" style="padding:0 16px" onclick="saveBankColumnName(${index})">Lưu</button>
+   </div>`);
+}
+
+function saveBankColumnName(index){
+ const col=bankColumns[index];
+ if(!col){closeModal();return;}
+
+ const newName=document.getElementById("editColumnName").value.trim();
+ if(!newName){toast("Nhập tên cột");return;}
+
+ col.name=newName;
+ syncBankMeta();
+ saveLocal();
+ closeModal();
+ renderSeed();
+ renderMatrix();
+ toast("Đã đổi tên cột");
+}
+
+function requestDeleteBankColumn(index){
+ const col=bankColumns[index];
+ if(!col)return;
+ if(col.isMB){toast("Không thể xóa cột BIZ MBBank");return;}
+
+ modal(`
+   <h3>Xóa cột</h3>
+   <div class="confirm-box">
+     Bạn có chắc muốn xóa cột <b>${escapeHtml(col.name)}</b>?
+   </div>
+   <div class="confirm-warning">
+     Toàn bộ mô tả và điểm của ngân hàng này trên tất cả cấu phần sẽ bị xóa khỏi bảng hiện tại.
+   </div>
+   <div class="modal-actions">
+     <button class="ghost" onclick="closeModal()">Hủy</button>
+     <button class="primary" style="padding:0 16px;background:#e5484d" onclick="confirmDeleteBankColumn(${index})">Xóa cột</button>
+   </div>`);
+}
+
+function confirmDeleteBankColumn(index){
+ const col=bankColumns[index];
+ if(!col || col.isMB){closeModal();return;}
+
+ bankColumns.splice(index,1);
+ seed.forEach(r=>{
+   delete r[col.key];
+   if(r.scores)delete r.scores[col.key];
+ });
+
+ syncBankMeta();
+ saveLocal();
+ closeModal();
+ renderSeed();
+ renderMatrix();
+ toast("Đã xóa cột "+col.name);
+}
+
+
+/* ===== Position calculation from benchmark matrix ===== */
+function getPositionStats(){
+ const totalComponents=seed.length;
+ const maxScore=totalComponents*3;
+
+ return bankColumns.map(bank=>{
+   const counts={0:0,1:0,2:0,3:0,null:0};
+   let total=0;
+
+   seed.forEach(row=>{
+     const value=row.scores?.[bank.key];
+
+     if(value===null || value===undefined || value===""){
+       counts.null++;
+       return;
+     }
+
+     const score=Math.max(0,Math.min(3,Number(value)));
+     counts[score]++;
+     total+=score;
+   });
+
+   return {
+     key:bank.key,
+     name:bank.name,
+     isMB:!!bank.isMB,
+     total,
+     maxScore,
+     m3:counts[3],
+     counts
+   };
+ }).sort((a,b)=>{
+   if(b.total!==a.total)return b.total-a.total;
+   if(b.m3!==a.m3)return b.m3-a.m3;
+   if(a.isMB!==b.isMB)return a.isMB?-1:1;
+   return a.name.localeCompare(b.name);
+ });
+}
+
+function profileSegment(count,total,className,label){
+ if(!count)return "";
+ const width=Math.max(30,(count/Math.max(1,total))*190);
+ return `<span class="profile-segment ${className}" style="width:${width}px" title="${label}: ${count}">${count}</span>`;
+}
+
+function renderPositionRanking(){
+ const body=document.getElementById("positionRankingBody");
+ if(!body)return;
+
+ const stats=getPositionStats();
+ const componentCount=Math.max(1,seed.length);
+
+ body.innerHTML=stats.map((item,index)=>`
+   <tr class="${item.isMB?"position-mb":""}">
+     <td class="position-rank">${index+1}</td>
+     <td class="position-bank">${escapeHtml(item.name)}</td>
+     <td class="position-score">${item.total}<small>/${item.maxScore}</small></td>
+     <td>
+       <div class="position-profile">
+         ${profileSegment(item.counts[3],componentCount,"p3","Điểm 3")}
+         ${profileSegment(item.counts[2],componentCount,"p2","Điểm 2")}
+         ${profileSegment(item.counts[1],componentCount,"p1","Điểm 1")}
+         ${profileSegment(item.counts[0],componentCount,"p0","Điểm 0")}
+         ${profileSegment(item.counts.null,componentCount,"pn","Chưa đánh giá")}
+       </div>
+     </td>
+     <td class="position-m3">${item.m3}</td>
+   </tr>
+ `).join("");
+}
+
+function cleanGroupName(name){
+ // Keep the exact Journey/Group name from the Product/Feature data.
+ // Only remove the optional alphabetical prefix such as "A. ", "B. ".
+ return String(name||"").replace(/^[A-Z]\.\s*/,"").trim();
+}
+
+function splitRadarLabel(label,maxChars=18){
+ const words=String(label||"").split(/\s+/).filter(Boolean);
+ if(!words.length)return [""];
+
+ const lines=[];
+ let current="";
+
+ words.forEach(word=>{
+   const next=current ? current+" "+word : word;
+   if(next.length<=maxChars || !current){
+     current=next;
+   }else{
+     lines.push(current);
+     current=word;
+   }
+ });
+
+ if(current)lines.push(current);
+
+ // Keep the chart readable for very long user-created group names.
+ if(lines.length>3){
+   const compact=[lines[0],lines[1],lines.slice(2).join(" ")];
+   if(compact[2].length>maxChars+5){
+     compact[2]=compact[2].slice(0,maxChars+4)+"…";
+   }
+   return compact;
+ }
+ return lines;
+}
+
+function groupAverageForBank(group,bankKey){
+ const rows=seed.filter(r=>r.group===group);
+ if(!rows.length)return 0;
+
+ const total=rows.reduce((sum,row)=>{
+   const value=row.scores?.[bankKey];
+   return sum + (value===null || value===undefined || value==="" ? 0 : Number(value));
+ },0);
+
+ return total/rows.length;
+}
+
+function polarPoint(cx,cy,r,angle){
+ return {x:cx+Math.cos(angle)*r,y:cy+Math.sin(angle)*r};
+}
+
+function polygonPoints(values,cx,cy,maxR,maxValue){
+ const n=values.length;
+ return values.map((v,i)=>{
+   const angle=-Math.PI/2+(Math.PI*2*i/n);
+   const p=polarPoint(cx,cy,maxR*(v/maxValue),angle);
+   return `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+ }).join(" ");
+}
+
+
+let radarSelectedCompetitors=null;
+let radarShowLeader=false;
+
+const radarPalette=[
+  "#3b82f6",
+  "#10b981",
+  "#f59e0b",
+  "#8b5cf6",
+  "#0ea5e9",
+  "#14b8a6",
+  "#f97316",
+  "#64748b"
+];
+
+function ensureRadarSelection(){
+ const mbKey=bankColumns.find(b=>b.isMB)?.key || bankKeys[0];
+ const competitorKeys=bankColumns.filter(b=>b.key!==mbKey).map(b=>b.key);
+
+ if(radarSelectedCompetitors===null){
+   const ranked=getPositionStats()
+     .filter(x=>!x.isMB)
+     .slice(0,3)
+     .map(x=>x.key);
+
+   radarSelectedCompetitors=new Set(ranked);
+ }
+
+ // Remove deleted columns from selection.
+ [...radarSelectedCompetitors].forEach(key=>{
+   if(!competitorKeys.includes(key))radarSelectedCompetitors.delete(key);
+ });
+}
+
+function radarSeriesColor(bankKey){
+ const mbKey=bankColumns.find(b=>b.isMB)?.key || bankKeys[0];
+ if(bankKey===mbKey)return "#ff626b";
+
+ const competitors=bankColumns.filter(b=>b.key!==mbKey);
+ const idx=Math.max(0,competitors.findIndex(b=>b.key===bankKey));
+ return radarPalette[idx % radarPalette.length];
+}
+
+function toggleRadarCompetitor(key){
+ ensureRadarSelection();
+
+ if(radarSelectedCompetitors.has(key)){
+   radarSelectedCompetitors.delete(key);
+ }else{
+   if(radarSelectedCompetitors.size>=3){
+     toast("Radar hiển thị tối đa 3 đối thủ cùng lúc để dễ đọc");
+     return;
+   }
+   radarSelectedCompetitors.add(key);
+ }
+
+ renderPositionRadar();
+}
+
+function toggleRadarLeader(){
+ radarShowLeader=!radarShowLeader;
+ renderPositionRadar();
+}
+
+function renderRadarControls(){
+ const root=document.getElementById("radarCompareControls");
+ if(!root)return;
+
+ ensureRadarSelection();
+
+ const mb=bankColumns.find(b=>b.isMB) || bankColumns[0];
+ const competitors=bankColumns.filter(b=>b.key!==mb.key);
+
+ root.innerHTML=`
+   <span class="radar-chip mb">
+     <i class="radar-chip-dot" style="background:#ff626b"></i>
+     ${escapeHtml(mb.name)}
+   </span>
+
+   ${competitors.map(bank=>{
+     const active=radarSelectedCompetitors.has(bank.key);
+     return `<button class="radar-chip ${active?"active":""}"
+                     onclick="toggleRadarCompetitor('${jsq(bank.key)}')"
+                     title="${active?"Bỏ khỏi radar":"Thêm vào radar"}">
+       <i class="radar-chip-dot" style="background:${radarSeriesColor(bank.key)}"></i>
+       ${escapeHtml(bank.name)}
+     </button>`;
+   }).join("")}
+
+   <button class="radar-chip leader ${radarShowLeader?"active":""}"
+           onclick="toggleRadarLeader()"
+           title="Hiển thị đường chuẩn dẫn đầu từng nhóm">
+     <i class="radar-chip-dot" style="background:#667eea"></i>
+     Dẫn đầu nhóm
+   </button>
+
+   <span class="radar-compare-note">${radarSelectedCompetitors.size}/3 đối thủ</span>
+ `;
+}
+
+function renderPositionRadar(){
+ const root=document.getElementById("positionRadar");
+ if(!root)return;
+
+ renderRadarControls();
+
+ const groups=groupOrder();
+ if(groups.length<3){
+   root.innerHTML=`<div style="color:#98a2b3;font-size:12px">Cần tối thiểu 3 nhóm để hiển thị radar.</div>`;
+   return;
+ }
+
+ ensureRadarSelection();
+
+ const mb=bankColumns.find(b=>b.isMB) || bankColumns[0];
+ const selectedBanks=[
+   mb,
+   ...bankColumns.filter(b=>radarSelectedCompetitors.has(b.key))
+ ];
+
+ const series=selectedBanks.map(bank=>({
+   key:bank.key,
+   name:bank.name,
+   isMB:bank.key===mb.key,
+   color:radarSeriesColor(bank.key),
+   values:groups.map(g=>groupAverageForBank(g,bank.key))
+ }));
+
+ const leaderDetails=groups.map(g=>{
+   const values=bankColumns.map(bank=>({
+     key:bank.key,
+     name:bank.name,
+     value:groupAverageForBank(g,bank.key)
+   }));
+   const maxValue=Math.max(...values.map(v=>v.value));
+   const leaders=values.filter(v=>Math.abs(v.value-maxValue)<0.0001);
+   return {value:maxValue, bankNames:leaders.map(v=>v.name)};
+ });
+ const leaderValues=leaderDetails.map(x=>x.value);
+
+ const width=560;
+ const height=330;
+ const cx=280;
+ const cy=168;
+ const radius=92;
+ const labelRadius=139;
+ const n=groups.length;
+
+ const grid=[1,2,3].map(level=>{
+   return `<polygon class="radar-grid-line" points="${polygonPoints(Array(n).fill(level),cx,cy,radius,3)}"></polygon>`;
+ }).join("");
+
+ const axes=groups.map((g,i)=>{
+   const angle=-Math.PI/2+(Math.PI*2*i/n);
+   const p=polarPoint(cx,cy,radius,angle);
+   return `<line class="radar-axis" x1="${cx}" y1="${cy}" x2="${p.x.toFixed(1)}" y2="${p.y.toFixed(1)}"></line>`;
+ }).join("");
+
+ const labels=groups.map((g,i)=>{
+   const label=cleanGroupName(g);
+   const lines=splitRadarLabel(label,20);
+   const angle=-Math.PI/2+(Math.PI*2*i/n);
+   const p=polarPoint(cx,cy,labelRadius,angle);
+
+   let anchor="middle";
+   const cos=Math.cos(angle);
+   if(cos>.30)anchor="start";
+   else if(cos<-.30)anchor="end";
+
+   const firstDy=lines.length===1 ? "0" : `${-((lines.length-1)*6)}px`;
+   const tspans=lines.map((line,lineIndex)=>{
+     const dy=lineIndex===0 ? firstDy : "13px";
+     return `<tspan x="${p.x.toFixed(1)}" dy="${dy}">${escapeHtml(line)}</tspan>`;
+   }).join("");
+
+   return `<text class="radar-label radar-hover-target"
+                 data-radar-index="${i}"
+                 x="${p.x.toFixed(1)}"
+                 y="${p.y.toFixed(1)}"
+                 text-anchor="${anchor}"
+                 dominant-baseline="middle">${tspans}</text>`;
+ }).join("");
+
+ const seriesSvg=series.map((s,seriesIndex)=>{
+   const polygon=polygonPoints(s.values,cx,cy,radius,3);
+   const fill=s.isMB ? "rgba(255,98,107,.10)" : "none";
+   const opacity=s.isMB ? 1 : .9;
+
+   const points=s.values.map((v,i)=>{
+     const angle=-Math.PI/2+(Math.PI*2*i/n);
+     const p=polarPoint(cx,cy,radius*(v/3),angle);
+     return `<circle class="radar-series-point radar-hover-target"
+                     data-radar-index="${i}"
+                     data-radar-series="${escapeHtml(s.key)}"
+                     cx="${p.x.toFixed(1)}"
+                     cy="${p.y.toFixed(1)}"
+                     r="${s.isMB?4.2:3.7}"
+                     fill="${s.color}"></circle>`;
+   }).join("");
+
+   return `
+     <polygon class="${s.isMB?"radar-series-area":"radar-series-line"}"
+              points="${polygon}"
+              fill="${fill}"
+              stroke="${s.color}"
+              opacity="${opacity}"></polygon>
+     ${points}
+   `;
+ }).join("");
+
+ const leaderSvg=radarShowLeader
+   ? `<polygon class="radar-leader-dash" points="${polygonPoints(leaderValues,cx,cy,radius,3)}"></polygon>`
+   : "";
+
+ root.innerHTML=`
+   <div class="radar-tooltip" id="radarTooltip"></div>
+   <svg class="position-radar-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Radar so sánh vị thế các nền tảng theo từng nhóm">
+     ${grid}
+     ${axes}
+     ${leaderSvg}
+     ${seriesSvg}
+     ${labels}
+   </svg>
+ `;
+
+ const tooltip=root.querySelector("#radarTooltip");
+
+ function showTooltip(event,index,seriesKey){
+   const groupName=cleanGroupName(groups[index]);
+
+   const rows=series.map(s=>({
+     name:s.name,
+     value:s.values[index],
+     color:s.color,
+     active:seriesKey===s.key
+   }));
+
+   if(radarShowLeader){
+     rows.push({
+       name:"Dẫn đầu nhóm",
+       value:leaderDetails[index].value,
+       color:"#667eea",
+       active:seriesKey==="leader"
+     });
+   }
+
+   tooltip.innerHTML=`
+     <div class="radar-tooltip-title">${escapeHtml(groupName)}</div>
+     ${rows.map(r=>`
+       <div class="radar-tooltip-row ${r.active?"active":""}">
+         <span class="series-name">
+           <i class="radar-tooltip-dot" style="background:${r.color}"></i>
+           ${escapeHtml(r.name)}
+         </span>
+         <b>${r.value.toFixed(2)}</b>
+       </div>
+     `).join("")}
+     ${radarShowLeader
+       ? `<div class="radar-tooltip-bank">Dẫn đầu: ${escapeHtml(leaderDetails[index].bankNames.join(", "))}</div>`
+       : ""}
+   `;
+
+   tooltip.classList.add("show");
+   moveTooltip(event);
+ }
+
+ function moveTooltip(event){
+   const rect=root.getBoundingClientRect();
+   let x=event.clientX-rect.left+12;
+   let y=event.clientY-rect.top+12;
+
+   const w=tooltip.offsetWidth||210;
+   const h=tooltip.offsetHeight||110;
+
+   if(x+w>rect.width-6)x=Math.max(6,x-w-24);
+   if(y+h>rect.height-6)y=Math.max(6,y-h-24);
+
+   tooltip.style.left=x+"px";
+   tooltip.style.top=y+"px";
+ }
+
+ function hideTooltip(){
+   tooltip.classList.remove("show");
+ }
+
+ root.querySelectorAll(".radar-hover-target").forEach(el=>{
+   el.addEventListener("mouseenter",event=>{
+     showTooltip(event,Number(el.dataset.radarIndex),el.dataset.radarSeries||"label");
+   });
+   el.addEventListener("mousemove",moveTooltip);
+   el.addEventListener("mouseleave",hideTooltip);
+ });
+}
+
+function renderPosition(){
+ renderPositionRanking();
+ renderPositionRadar();
+}
+
+function renderMatrix(){
+ const head=document.getElementById("matrixHead");
+ const body=document.getElementById("matrixBody");
+ if(!head || !body)return;
+
+ const header=`<th>Cấu phần</th>${bankColumns.map(b=>`<th title="${escapeHtml(b.name)}">${escapeHtml(b.name)}</th>`).join("")}<th>TB</th>`;
+ head.innerHTML=header;
+ body.innerHTML="";
+
+ const mbKey=bankColumns.find(b=>b.isMB)?.key || bankKeys[0];
+ const competitorKeys=bankColumns.filter(b=>b.key!==mbKey).map(b=>b.key);
+
+ groupOrder().forEach(g=>{
+  const rows=seed.filter(r=>r.group===g);
+
+  body.insertAdjacentHTML(
+    "beforeend",
+    `<tr class="group-row">
+      <td colspan="${bankColumns.length+2}">
+        <span class="group-toggle" onclick="toggleMatrixGroup('${jsq(g)}')">${collapsed["m_"+g]?"▶":"▼"}</span>
+        ${escapeHtml(g.replace(/^[A-Z]\.\s*/,""))}
+      </td>
+    </tr>`
+  );
+
+  if(!collapsed["m_"+g]){
+    rows.forEach(r=>{
+      const vals=bankKeys.map(k=>r.scores?.[k]??null);
+      const non=vals.filter(v=>v!==null&&v!==undefined);
+      const avg=non.length?(non.reduce((a,b)=>a+b,0)/non.length).toFixed(1):"—";
+
+      const competitorValues=competitorKeys
+        .map(k=>r.scores?.[k])
+        .filter(v=>v!==null&&v!==undefined);
+
+      const maxComp=competitorValues.length
+        ? Math.max(...competitorValues)
+        : -Infinity;
+
+      body.insertAdjacentHTML(
+        "beforeend",
+        `<tr>
+          <td>${escapeHtml(r.feature)}</td>
+          ${bankKeys.map(k=>{
+            const v=r.scores?.[k];
+            if(v===null||v===undefined){
+              return `<td><span class="score">—</span></td>`;
+            }
+
+            let cls=`score s${v}`;
+            if(k===mbKey && v<maxComp)cls+=" mb-behind";
+
+            return `<td><span class="${cls}" title="${escapeHtml((r[k]||"").slice(0,180))}">${v}</span></td>`;
+          }).join("")}
+          <td>${avg}</td>
+        </tr>`
+      );
+    });
+  }
+ });
+ renderPosition();
+}
+function toggleMatrixGroup(g){collapsed["m_"+g]=!collapsed["m_"+g];renderMatrix();}
+
+function modal(content){document.getElementById("modalRoot").innerHTML=`<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">${content}</div></div>`}
+function closeModal(){document.getElementById("modalRoot").innerHTML=""}
+
+let pendingBenchmarkImport=null;
+
+async function handleExcelImport(input){
+ const file=input.files?.[0];
+ if(!file)return;
+
+ try{
+   toast("Đang đọc file "+file.name+"...");
+
+   let rows;
+   const lower=file.name.toLowerCase();
+
+   if(lower.endsWith(".csv")){
+     rows=parseCsvText(await file.text());
+   }else if(lower.endsWith(".xlsx")){
+     rows=await parseXlsxFirstSheet(file);
+   }else{
+     throw new Error("Định dạng chưa hỗ trợ. Hãy dùng .xlsx hoặc .csv");
+   }
+
+   const parsed=convertImportedRowsToBenchmark(rows,file.name);
+   pendingBenchmarkImport=parsed;
+
+   modal(`
+     <h3>Import Initial Benchmark Seed</h3>
+
+     <div class="import-preview">
+       <div class="import-preview-row"><b>File</b><span>${escapeHtml(file.name)}</span></div>
+       <div class="import-preview-row"><b>Cột ngân hàng</b><span>${parsed.bankColumns.length}</span></div>
+       <div class="import-preview-row"><b>Nhóm / Journey</b><span>${parsed.groups.length}</span></div>
+       <div class="import-preview-row"><b>Hàng cấu phần</b><span>${parsed.seed.length}</span></div>
+       <div class="import-preview-row"><b>Nhóm phát hiện</b><span>${escapeHtml(parsed.groups.slice(0,6).join(", "))}${parsed.groups.length>6?"…":""}</span></div>
+     </div>
+
+     <div class="import-help">
+       Quy tắc đọc file: hàng đầu tiên là header; cột đầu là <b>Nhóm / Tính năng</b>;
+       các cột còn lại là ngân hàng. Hàng chỉ có nội dung ở cột đầu được hiểu là <b>Nhóm</b>.
+       Nội dung các ô được import làm mô tả capability; điểm được để <b>NULL</b> để bạn chấm sau.
+     </div>
+
+     <div class="confirm-warning">
+       Import sẽ thay thế dữ liệu Initial Benchmark Seed hiện tại và danh sách cột ngân hàng đang hiển thị.
+     </div>
+
+     <div class="modal-actions">
+       <button class="ghost" onclick="cancelBenchmarkImport()">Hủy</button>
+       <button class="primary" style="padding:0 16px" onclick="confirmBenchmarkImport()">Import dữ liệu</button>
+     </div>
+   `);
+ }catch(err){
+   console.error(err);
+   toast("Không đọc được file: "+(err?.message||err));
+ }finally{
+   input.value="";
+ }
+}
+
+function cancelBenchmarkImport(){
+ pendingBenchmarkImport=null;
+ closeModal();
+}
+
+function confirmBenchmarkImport(){
+ if(!pendingBenchmarkImport){
+   toast("Không có dữ liệu import");
+   return;
+ }
+
+ seed=pendingBenchmarkImport.seed;
+ bankColumns=pendingBenchmarkImport.bankColumns;
+ syncBankMeta();
+
+ collapsed={};
+ pendingBenchmarkImport=null;
+
+ localStorage.setItem("mb_seed",JSON.stringify(seed));
+ localStorage.setItem("mb_bank_columns",JSON.stringify(bankColumns));
+
+ closeModal();
+ renderSeed();
+ renderMatrix();
+ toast("Import Excel thành công");
+}
+
+/* ---------- CSV ---------- */
+function parseCsvText(text){
+ const rows=[];
+ let row=[],cell="",quoted=false;
+
+ for(let i=0;i<text.length;i++){
+   const ch=text[i];
+
+   if(quoted){
+     if(ch==='"' && text[i+1]==='"'){
+       cell+='"';i++;
+     }else if(ch==='"'){
+       quoted=false;
+     }else{
+       cell+=ch;
+     }
+   }else{
+     if(ch==='"'){
+       quoted=true;
+     }else if(ch===','){
+       row.push(cell);cell="";
+     }else if(ch==='\n'){
+       row.push(cell);rows.push(row);row=[];cell="";
+     }else if(ch!=='\r'){
+       cell+=ch;
+     }
+   }
+ }
+
+ row.push(cell);
+ if(row.some(v=>String(v).trim()!==""))rows.push(row);
+
+ return rows;
+}
+
+/* ---------- Minimal self-contained XLSX reader ----------
+   Reads the first worksheet directly from the ZIP/XML structure.
+   No external CDN/library is required. ---------- */
+
+async function parseXlsxFirstSheet(file){
+ const buffer=await file.arrayBuffer();
+ const entries=await unzipXlsxEntries(buffer);
+
+ const workbookXml=entries.get("xl/workbook.xml");
+ const relsXml=entries.get("xl/_rels/workbook.xml.rels");
+
+ let sheetPath=null;
+
+ if(workbookXml && relsXml){
+   const workbook=parseXml(workbookXml);
+   const rels=parseXml(relsXml);
+
+   const sheets=workbook.getElementsByTagNameNS("*","sheet");
+   if(sheets.length){
+     const rid=sheets[0].getAttribute("r:id") ||
+               sheets[0].getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships","id");
+
+     const relationships=rels.getElementsByTagNameNS("*","Relationship");
+     for(const rel of relationships){
+       if(rel.getAttribute("Id")===rid){
+         let target=rel.getAttribute("Target")||"";
+         target=target.replace(/^\/+/,"");
+
+         if(target.startsWith("xl/")){
+           sheetPath=target;
+         }else{
+           const parts=("xl/"+target).split("/");
+           const normalized=[];
+           for(const part of parts){
+             if(part===".." && normalized.length)normalized.pop();
+             else if(part!=="." && part!=="")normalized.push(part);
+           }
+           sheetPath=normalized.join("/");
+         }
+         break;
+       }
+     }
+   }
+ }
+
+ if(!sheetPath || !entries.has(sheetPath)){
+   sheetPath=[...entries.keys()]
+     .filter(k=>/^xl\/worksheets\/sheet\d+\.xml$/i.test(k))
+     .sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}))[0];
+ }
+
+ if(!sheetPath || !entries.has(sheetPath)){
+   throw new Error("Không tìm thấy worksheet trong file XLSX");
+ }
+
+ const sharedStrings=parseSharedStrings(entries.get("xl/sharedStrings.xml")||"");
+ return parseWorksheetXml(entries.get(sheetPath),sharedStrings);
+}
+
+function parseXml(xmlText){
+ const doc=new DOMParser().parseFromString(xmlText,"application/xml");
+ if(doc.getElementsByTagName("parsererror").length){
+   throw new Error("XML trong XLSX không hợp lệ");
+ }
+ return doc;
+}
+
+function parseSharedStrings(xmlText){
+ if(!xmlText)return [];
+ const doc=parseXml(xmlText);
+ const items=[...doc.getElementsByTagNameNS("*","si")];
+ return items.map(si=>{
+   return [...si.getElementsByTagNameNS("*","t")]
+     .map(t=>t.textContent||"")
+     .join("");
+ });
+}
+
+function columnIndexFromRef(ref){
+ const m=String(ref||"").match(/^([A-Z]+)/i);
+ if(!m)return 0;
+ let n=0;
+ for(const ch of m[1].toUpperCase()){
+   n=n*26+(ch.charCodeAt(0)-64);
+ }
+ return n-1;
+}
+
+function parseWorksheetXml(xmlText,sharedStrings){
+ const doc=parseXml(xmlText);
+ const rowEls=[...doc.getElementsByTagNameNS("*","row")];
+ const rows=[];
+ let maxCol=0;
+
+ for(const rowEl of rowEls){
+   const cells=[...rowEl.getElementsByTagNameNS("*","c")];
+   const row=[];
+
+   for(const c of cells){
+     const col=columnIndexFromRef(c.getAttribute("r"));
+     maxCol=Math.max(maxCol,col);
+
+     const type=c.getAttribute("t")||"";
+     let value="";
+
+     if(type==="inlineStr"){
+       value=[...c.getElementsByTagNameNS("*","t")]
+         .map(t=>t.textContent||"")
+         .join("");
+     }else{
+       const v=c.getElementsByTagNameNS("*","v")[0];
+       const raw=v?.textContent ?? "";
+
+       if(type==="s"){
+         value=sharedStrings[Number(raw)] ?? "";
+       }else if(type==="b"){
+         value=raw==="1"?"TRUE":"FALSE";
+       }else{
+         value=raw;
+       }
+     }
+
+     row[col]=value;
+   }
+
+   rows.push(row);
+ }
+
+ const width=maxCol+1;
+ return rows.map(r=>Array.from({length:width},(_,i)=>r[i]??""));
+}
+
+async function unzipXlsxEntries(arrayBuffer){
+ const view=new DataView(arrayBuffer);
+ const bytes=new Uint8Array(arrayBuffer);
+ const decoder=new TextDecoder("utf-8");
+
+ const eocd=findZipEndOfCentralDirectory(view);
+ if(eocd<0)throw new Error("File XLSX/ZIP không hợp lệ");
+
+ const totalEntries=view.getUint16(eocd+10,true);
+ const centralOffset=view.getUint32(eocd+16,true);
+
+ let ptr=centralOffset;
+ const meta=[];
+
+ for(let i=0;i<totalEntries;i++){
+   if(view.getUint32(ptr,true)!==0x02014b50){
+     throw new Error("Central directory của XLSX không hợp lệ");
+   }
+
+   const method=view.getUint16(ptr+10,true);
+   const compressedSize=view.getUint32(ptr+20,true);
+   const filenameLen=view.getUint16(ptr+28,true);
+   const extraLen=view.getUint16(ptr+30,true);
+   const commentLen=view.getUint16(ptr+32,true);
+   const localOffset=view.getUint32(ptr+42,true);
+
+   const name=decoder.decode(bytes.slice(ptr+46,ptr+46+filenameLen));
+   meta.push({name,method,compressedSize,localOffset});
+
+   ptr+=46+filenameLen+extraLen+commentLen;
+ }
+
+ const result=new Map();
+
+ for(const entry of meta){
+   if(entry.name.endsWith("/"))continue;
+
+   const off=entry.localOffset;
+   if(view.getUint32(off,true)!==0x04034b50)continue;
+
+   const filenameLen=view.getUint16(off+26,true);
+   const extraLen=view.getUint16(off+28,true);
+   const dataStart=off+30+filenameLen+extraLen;
+   const compressed=bytes.slice(dataStart,dataStart+entry.compressedSize);
+
+   let decompressed;
+
+   if(entry.method===0){
+     decompressed=compressed;
+   }else if(entry.method===8){
+     decompressed=await inflateRawBytes(compressed);
+   }else{
+     continue;
+   }
+
+   result.set(entry.name,decoder.decode(decompressed));
+ }
+
+ return result;
+}
+
+function findZipEndOfCentralDirectory(view){
+ const min=Math.max(0,view.byteLength-65557);
+ for(let i=view.byteLength-22;i>=min;i--){
+   if(view.getUint32(i,true)===0x06054b50)return i;
+ }
+ return -1;
+}
+
+async function inflateRawBytes(bytes){
+ if(typeof DecompressionStream==="undefined"){
+   throw new Error("Trình duyệt này chưa hỗ trợ giải nén XLSX. Hãy dùng Chrome/Edge mới hoặc import CSV.");
+ }
+
+ let stream;
+ try{
+   stream=new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+ }catch(e){
+   throw new Error("Trình duyệt không hỗ trợ deflate-raw để đọc XLSX");
+ }
+
+ const buffer=await new Response(stream).arrayBuffer();
+ return new Uint8Array(buffer);
+}
+
+/* ---------- Convert worksheet -> app seed ---------- */
+
+function normalizeImportedCell(value){
+ if(value===null || value===undefined)return "";
+ return String(value).replace(/\r\n/g,"\n").replace(/\r/g,"\n").trim();
+}
+
+function importedBankKey(header,usedKeys){
+ const upper=normalizeColumnKey(header);
+ let preferred;
+
+ if(/MBBANK|BIZ_MB|BIZMBBANK|^MB$/.test(upper)) preferred="MB";
+ else if(/TECHCOMBANK|TCB/.test(upper)) preferred="TCB";
+ else if(/VIETINBANK|EFAST|CTG/.test(upper)) preferred="CTG";
+ else if(/BIDV/.test(upper)) preferred="BIDV";
+ else if(/VPBANK|NEOBIZ|VPB/.test(upper)) preferred="VPB";
+ else if(/VIETCOMBANK|VCB/.test(upper)) preferred="VCB";
+ else preferred=upper || "BANK";
+
+ let key=preferred;
+ let n=2;
+ while(usedKeys.has(key))key=`${preferred}_${n++}`;
+
+ usedKeys.add(key);
+ return key;
+}
+
+function convertImportedRowsToBenchmark(rows,fileName){
+ const cleaned=(rows||[])
+   .map(r=>(r||[]).map(normalizeImportedCell))
+   .filter(r=>r.some(v=>v!==""));
+
+ if(cleaned.length<2){
+   throw new Error("File không có đủ dữ liệu để import");
+ }
+
+ let headerIndex=cleaned.findIndex(r=>{
+   const first=(r[0]||"").toLowerCase();
+   return first.includes("nhóm") || first.includes("tính năng") || first.includes("cấu phần");
+ });
+ if(headerIndex<0)headerIndex=0;
+
+ const header=cleaned[headerIndex];
+ const bankHeaders=header
+   .slice(1)
+   .map(normalizeImportedCell)
+   .filter(Boolean);
+
+ if(!bankHeaders.length){
+   throw new Error("Không tìm thấy các cột ngân hàng trong header");
+ }
+
+ const usedKeys=new Set();
+ const importedColumns=bankHeaders.map(name=>{
+   const key=importedBankKey(name,usedKeys);
+   return {
+     key,
+     name,
+     isMB:key==="MB"
+   };
+ });
+
+ const body=cleaned.slice(headerIndex+1);
+ const importedSeed=[];
+ let currentGroup="";
+ let groupCounter=0;
+
+ for(const row of body){
+   const first=normalizeImportedCell(row[0]);
+   if(!first)continue;
+
+   const bankValues=bankHeaders.map((_,i)=>normalizeImportedCell(row[i+1]));
+   const nonEmptyBanks=bankValues.filter(Boolean).length;
+
+   // A row with only the first cell populated is treated as a group heading.
+   if(nonEmptyBanks===0){
+     currentGroup=first;
+     groupCounter++;
+     continue;
+   }
+
+   if(!currentGroup){
+     currentGroup="DỮ LIỆU IMPORT";
+     groupCounter++;
+   }
+
+   const item={
+     group:currentGroup,
+     side:"left",
+     feature:first,
+     scores:{}
+   };
+
+   importedColumns.forEach((col,i)=>{
+     item[col.key]=bankValues[i]||"";
+     item.scores[col.key]=null;
+   });
+
+   importedSeed.push(item);
+ }
+
+ if(!importedSeed.length){
+   throw new Error("Không tìm thấy hàng cấu phần có dữ liệu ngân hàng");
+ }
+
+ const groups=[];
+ for(const r of importedSeed){
+   if(!groups.includes(r.group))groups.push(r.group);
+ }
+
+ return {
+   fileName,
+   bankColumns:importedColumns,
+   seed:importedSeed,
+   groups
+ };
+}
+
+function exportCSV(){
+ const rows=[
+   ["Group","Feature",...bankColumns.map(b=>b.name)],
+   ...seed.map(r=>[r.group,r.feature,...bankKeys.map(k=>r[k]||"")])
+ ];
+ const csv=rows.map(row=>row.map(v=>`"${String(v??"").replaceAll('"','""')}"`).join(",")).join("\n");
+ const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"});
+ const a=document.createElement("a");
+ a.href=URL.createObjectURL(blob);
+ a.download="initial_benchmark_seed.csv";
+ a.click();
+ URL.revokeObjectURL(a.href);
+}
+function escapeHtml(s){return String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[m]))}
+function attr(s){return escapeHtml(s).replaceAll("\n"," ")}
+function nl2br(s){return escapeHtml(s).replace(/\n/g,"<br>")}
+function jsq(s){return String(s).replace(/\\/g,"\\\\").replace(/'/g,"\\'")}
+
+renderSources();renderDiscovery();renderSeed();renderMatrix();showPage("summary");
+</script>
+</body>
+</html>
