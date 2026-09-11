@@ -1,25 +1,16 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useAuth } from '@/providers/AuthProvider';
-import { ChevronDown, ChevronRight, Layers, Database, Users, Shield, Settings2 } from 'lucide-react';
+import { Database, Settings2 } from 'lucide-react';
 
 export default function AppSidebar() {
   const pathname = usePathname();
-  const { user } = useAuth();
-  const [productMenuOpen, setProductMenuOpen] = useState(true);
 
   const isSummary = pathname === '/summary' || pathname === '/';
-  const isProducts = pathname === '/products';
-  const isMatrix = pathname === '/matrix';
-  const isUsers = pathname === '/users';
   const isSources = pathname === '/sources';
-  const isProductDataActive = isProducts || isMatrix;
-
-  const isAdmin = user?.role === 'admin' || user?.username === 'admin';
 
   return (
     <aside className="w-[220px] shrink-0 border-r border-[#d9e2f2] p-[18px_14px] sticky top-0 h-screen bg-white flex flex-col justify-between z-30">
@@ -44,9 +35,9 @@ export default function AppSidebar() {
         {/* LV1: Tổng hợp dữ liệu */}
         <Link
           href="/summary"
-          className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg my-0.5 text-[13px] transition-colors ${
+          className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg my-1 text-[13px] transition-colors ${
             isSummary
-              ? 'bg-[#eef5ff] text-[#1646d8] font-bold'
+              ? 'bg-[#eef5ff] text-[#1646d8] font-bold shadow-xs'
               : 'text-[#344054] hover:bg-[#f7f9fc] font-medium'
           }`}
         >
@@ -57,83 +48,15 @@ export default function AppSidebar() {
         {/* LV1: Cấu hình nguồn */}
         <Link
           href="/sources"
-          className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg my-0.5 text-[13px] transition-colors ${
+          className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg my-1 text-[13px] transition-colors ${
             isSources
-              ? 'bg-[#eef5ff] text-[#1646d8] font-bold'
+              ? 'bg-[#eef5ff] text-[#1646d8] font-bold shadow-xs'
               : 'text-[#344054] hover:bg-[#f7f9fc] font-medium'
           }`}
         >
           <Settings2 className="w-4 h-4" />
           <span>Cấu hình nguồn</span>
         </Link>
-
-        {/* LV1: Dữ liệu Sản phẩm/Tính năng */}
-        <button
-          type="button"
-          onClick={() => setProductMenuOpen(!productMenuOpen)}
-          className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-lg my-0.5 text-[13px] text-left transition-colors cursor-pointer ${
-            isProductDataActive
-              ? 'text-[#1646d8] font-bold'
-              : 'text-[#344054] hover:bg-[#f7f9fc] font-medium'
-          }`}
-        >
-          <div className="flex items-center gap-2.5">
-            <Layers className="w-4 h-4" />
-            <span>Dữ liệu SP/Tính năng</span>
-          </div>
-          <span className="text-[#667085]">
-            {productMenuOpen ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
-          </span>
-        </button>
-
-        {/* Submenu for LV2 */}
-        {productMenuOpen && (
-          <div className="space-y-0.5 mt-0.5">
-            <Link
-              href="/products"
-              className={`flex items-center pl-8 pr-3 py-2 rounded-lg text-[12px] leading-snug transition-colors ${
-                isProducts
-                  ? 'bg-[#eef5ff] text-[#1646d8] font-bold'
-                  : 'text-[#344054] hover:bg-[#f7f9fc]'
-              }`}
-            >
-              <span>SP/Tính năng so với đối thủ</span>
-            </Link>
-
-            <Link
-              href="/matrix"
-              className={`flex items-center pl-8 pr-3 py-2 rounded-lg text-[12px] leading-snug transition-colors ${
-                isMatrix
-                  ? 'bg-[#eef5ff] text-[#1646d8] font-bold'
-                  : 'text-[#344054] hover:bg-[#f7f9fc]'
-              }`}
-            >
-              <span>Ma trận chấm điểm vị thế</span>
-            </Link>
-          </div>
-        )}
-
-        {/* Admin Navigation Section - Only visible for admin accounts */}
-        {isAdmin && (
-          <div className="mt-4 pt-3 border-t border-[#eef2f8]">
-            <div className="text-[11px] uppercase tracking-wider text-[#98a2b3] font-semibold my-[10px] mx-2 flex items-center gap-1.5">
-              <Shield className="w-3 h-3 text-[#1646d8]" />
-              <span>Quản trị</span>
-            </div>
-
-            <Link
-              href="/users"
-              className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg my-0.5 text-[13px] transition-colors ${
-                isUsers
-                  ? 'bg-[#eef5ff] text-[#1646d8] font-bold'
-                  : 'text-[#344054] hover:bg-[#f7f9fc] font-medium'
-              }`}
-            >
-              <Users className="w-4 h-4" />
-              <span>Quản lý tài khoản</span>
-            </Link>
-          </div>
-        )}
       </div>
 
       {/* Bottom info note */}
