@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Bank, IntelligenceItem, SourceAlert, ScanJobDetail, ScanMetrics, SourceExecutionResult } from '@/types';
 import ScanSetupPanel from '@/components/summary/ScanSetupPanel';
 import SummaryStatCards from '@/components/summary/SummaryStatCards';
 import SourceAlertsBanner from '@/components/summary/SourceAlertsBanner';
 import AggregatedResultsTable from '@/components/summary/AggregatedResultsTable';
-import { Bank, IntelligenceItem, SourceAlert, ScanJobDetail } from '@/types';
+import ScanDebugReport from '@/components/summary/ScanDebugReport';
 
 export default function SummaryPage() {
   // 1. Core State
@@ -45,6 +46,11 @@ export default function SummaryPage() {
   });
 
   const [retryingAlertId, setRetryingAlertId] = useState<string | null>(null);
+  const [lastScanReport, setLastScanReport] = useState<{
+    metrics?: ScanMetrics;
+    sourceResults?: SourceExecutionResult[];
+    status?: string;
+  } | null>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const showToast = (msg: string) => {
@@ -155,16 +161,34 @@ export default function SummaryPage() {
               currentBankName: job.currentBankName,
             });
 
-            if (job.status === 'completed') {
+            if (['completed', 'success', 'partial', 'empty'].includes(job.status)) {
               if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
               setIsScanning(false);
               setActiveScanId(null);
-              loadResults();
-              showToast('🎉 Quét và tổng hợp dữ liệu thành công!');
+              setLastScanReport({
+                metrics: pollJson.metrics || job.metrics,
+                sourceResults: pollJson.sourceResults || job.sourceResults,
+                status: pollJson.status || job.status,
+              });
+              if (pollJson.items && pollJson.items.length > 0) {
+                setItems(pollJson.items);
+              } else {
+                loadResults();
+              }
+              showToast(
+                job.totalFound > 0
+                  ? `🎉 Quét hoàn tất: Thu thập ${job.totalFound} nội dung doanh nghiệp!`
+                  : 'Lượt quét hoàn thành (0 kết quả phù hợp với khoảng ngày/bộ lọc)'
+              );
             } else if (job.status === 'cancelled' || job.status === 'failed') {
               if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
               setIsScanning(false);
               setActiveScanId(null);
+              setLastScanReport({
+                metrics: pollJson.metrics || job.metrics,
+                sourceResults: pollJson.sourceResults || job.sourceResults,
+                status: pollJson.status || job.status,
+              });
               showToast(job.status === 'cancelled' ? 'Lượt quét đã bị hủy' : 'Lượt quét gặp lỗi');
             }
           }
@@ -282,7 +306,15 @@ export default function SummaryPage() {
         isRetryingId={retryingAlertId}
       />
 
-      {/* 4. Bảng tổng hợp dữ liệu theo ngân hàng */}
+      {/* 4. Báo cáo kiểm soát kỹ thuật & Debug lượt quét */}
+      <ScanDebugReport
+        metrics={lastScanReport?.metrics}
+        sourceResults={lastScanReport?.sourceResults}
+        scanStatus={lastScanReport?.status}
+        totalItems={items.length}
+      />
+
+      {/* 5. Bảng tổng hợp dữ liệu theo ngân hàng */}
       <AggregatedResultsTable
         items={items}
         banks={banks}
