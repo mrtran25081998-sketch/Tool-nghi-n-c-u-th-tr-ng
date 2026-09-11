@@ -170,7 +170,7 @@ export type SourceRole =
   | 'OTHER'
   | 'IRRELEVANT';
 
-export type VerificationStatus = 'VERIFIED' | 'MANUAL_VERIFY' | 'FAILED';
+export type SeedVerificationStatus = 'VERIFIED' | 'MANUAL_VERIFY' | 'FAILED';
 export type SourceStatus = 'TRACKING' | 'DISCOVERED' | 'REVIEW' | 'IGNORE';
 export type RenderMode = 'HTTP_HTML' | 'JS_BROWSER' | 'META_API_OR_BROWSER';
 
@@ -387,5 +387,91 @@ export interface ReviewAction {
   new_description?: string | null;
   notes?: string | null;
   created_at: string;
+}
+
+/* ─────────────────────────── Banking Intelligence Domain (Specification) ─────────────────────────── */
+
+export type IntelligenceCategory =
+  | 'Sản phẩm mới'
+  | 'Tính năng mới'
+  | 'Ưu đãi/khuyến mại mới'
+  | 'Chương trình mới'
+  | 'Ngân hàng số doanh nghiệp'
+  | 'Tài khoản doanh nghiệp'
+  | 'Tín dụng và khoản vay'
+  | 'Thẻ doanh nghiệp'
+  | 'Thanh toán'
+  | 'Quản lý dòng tiền'
+  | 'Thu hộ/chi hộ'
+  | 'POS/QR'
+  | 'Chuyển tiền quốc tế'
+  | 'Tài trợ thương mại'
+  | 'LC và bảo lãnh';
+
+export type VerificationStatus = 'verified' | 'review' | 'invalid';
+
+export interface IntelligenceItem {
+  id: string;
+  bankId: string;
+  bankName: string;
+  publishedAt: string; // ISO date YYYY-MM-DD or ISO string
+  title: string;
+  category: IntelligenceCategory | string;
+  summary: string;
+  audience: string; // e.g. 'SME', 'Doanh nghiệp lớn', 'Hộ kinh doanh', 'Corporate'
+  websiteUrl?: string;
+  facebookUrl?: string;
+  sourceTypes: ('website' | 'facebook')[];
+  verificationStatus: VerificationStatus;
+  confidenceScore: number; // 0.0 - 1.0
+  collectedAt: string;
+  scanId?: string;
+  isDemo?: boolean;
+}
+
+export interface SourceAlert {
+  id: string;
+  bankId: string;
+  bankName: string;
+  sourceType: 'website' | 'facebook';
+  errorCause: string; // e.g. 'HTTP 403 Forbidden', 'Yêu cầu đăng nhập Facebook', 'Không lấy được permalink'
+  httpStatus?: number;
+  checkedAt: string;
+  resolved?: boolean;
+}
+
+export interface ScanJobDetail {
+  id: string;
+  dateFrom: string;
+  dateTo: string;
+  selectedBanks: string[]; // Bank IDs
+  sourceTypes: ('website' | 'facebook')[];
+  status: 'queued' | 'running' | 'completed' | 'cancelled' | 'failed';
+  progressPercent: number;
+  currentStage: string; // e.g. 'Đang quét ngân hàng 3/15 – Vietcombank'
+  currentBankName?: string;
+  totalFound: number;
+  errorSummary?: string;
+  createdAt: string;
+  finishedAt?: string;
+}
+
+export interface BankConfig {
+  id: string;
+  name: string;
+  code: string;
+  logo?: string;
+  active: boolean;
+  websiteUrl: string;
+  enterpriseHubUrl: string;
+  subUrls?: string[];
+  sitemapUrl?: string;
+  facebookUrl: string;
+  facebookPageId?: string;
+  enterpriseKeywords?: string[];
+  exclusionKeywords?: string[];
+  lastScannedAt?: string;
+  websiteStatus: 'VERIFIED' | 'MANUAL_VERIFY' | 'FAILED';
+  facebookStatus: 'VERIFIED' | 'MANUAL_VERIFY' | 'FAILED';
 }
 
