@@ -6,6 +6,7 @@ export const dynamic = 'force-dynamic';
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
+    const scan_id = searchParams.get('scan_id') || undefined;
     const date_from = searchParams.get('date_from') || undefined;
     const date_to = searchParams.get('date_to') || undefined;
     const bankParam = searchParams.get('bank_ids');
@@ -16,6 +17,7 @@ export async function GET(req: NextRequest) {
     const mode = (searchParams.get('mode') as 'live' | 'demo') || 'live';
 
     const items = await store.getIntelligenceItems({
+      scan_id,
       date_from,
       date_to,
       bank_ids,
@@ -27,6 +29,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      items,
       data: items,
       meta: {
         total: items.length,
