@@ -14,7 +14,53 @@ export async function GET(
         { status: 404 }
       );
     }
-    return NextResponse.json({ success: true, data: job });
+
+    const items = await store.getIntelligenceItems({
+      scan_id: id,
+      date_from: job.dateFrom,
+      date_to: job.dateTo,
+      mode: 'live',
+    });
+
+    const alerts = await store.getSourceAlerts();
+
+    const responsePayload = {
+      success: true,
+      scanId: job.id,
+      status: job.status,
+      progress: {
+        current: Math.round(((job.progressPercent || 0) / 100) * (job.selectedBanks.length || 1)),
+        total: job.selectedBanks.length || 1,
+        percent: job.progressPercent,
+        currentStage: job.currentStage,
+        currentBank: job.currentBankName || '',
+      },
+      metrics: job.metrics || {
+        selectedBanks: job.selectedBanks.length,
+        selectedSources: job.selectedBanks.length * job.sourceTypes.length,
+        sourcesAttempted: 0,
+        sourcesSucceeded: 0,
+        sourcesFailed: 0,
+        pagesDiscovered: 0,
+        pagesFetched: 0,
+        itemsParsed: 0,
+        itemsRejectedByDate: 0,
+        itemsRejectedByAudience: 0,
+        itemsMissingDate: 0,
+        itemsDeduplicated: 0,
+        itemsSaved: 0,
+      },
+      items,
+      sourceResults: job.sourceResults || [],
+      alerts,
+      // Backward compatibility alias for UI consumers expecting json.data
+      data: {
+        ...job,
+        items,
+      },
+    };
+
+    return NextResponse.json(responsePayload);
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }
