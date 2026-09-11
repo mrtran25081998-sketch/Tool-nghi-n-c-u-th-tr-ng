@@ -419,6 +419,8 @@ export interface IntelligenceItem {
   category: IntelligenceCategory | string;
   summary: string;
   audience: string; // e.g. 'SME', 'Doanh nghiệp lớn', 'Hộ kinh doanh', 'Corporate'
+  audienceReason?: string;
+  dateReason?: string;
   websiteUrl?: string;
   facebookUrl?: string;
   sourceTypes: ('website' | 'facebook')[];
@@ -440,17 +442,48 @@ export interface SourceAlert {
   resolved?: boolean;
 }
 
+export interface ScanMetrics {
+  selectedBanks: number;
+  selectedSources: number;
+  sourcesAttempted: number;
+  sourcesSucceeded: number;
+  sourcesFailed: number;
+  pagesDiscovered: number;
+  pagesFetched: number;
+  itemsParsed: number;
+  itemsRejectedByDate: number;
+  itemsRejectedByAudience: number;
+  itemsMissingDate: number;
+  itemsDeduplicated: number;
+  itemsSaved: number;
+}
+
+export interface SourceExecutionResult {
+  bankId: string;
+  bankName: string;
+  sourceType: 'website' | 'facebook';
+  status: 'pending' | 'running' | 'success' | 'partial' | 'failed' | 'unavailable';
+  url: string;
+  httpStatus: number;
+  discoveredCount: number;
+  savedCount: number;
+  errorCode?: string;
+  errorMessage?: string;
+}
+
 export interface ScanJobDetail {
   id: string;
   dateFrom: string;
   dateTo: string;
   selectedBanks: string[]; // Bank IDs
   sourceTypes: ('website' | 'facebook')[];
-  status: 'queued' | 'running' | 'completed' | 'cancelled' | 'failed';
+  status: 'queued' | 'running' | 'completed' | 'cancelled' | 'failed' | 'success' | 'partial' | 'empty';
   progressPercent: number;
   currentStage: string; // e.g. 'Đang quét ngân hàng 3/15 – Vietcombank'
   currentBankName?: string;
   totalFound: number;
+  metrics?: ScanMetrics;
+  sourceResults?: SourceExecutionResult[];
   errorSummary?: string;
   createdAt: string;
   finishedAt?: string;
