@@ -235,9 +235,8 @@ class Store {
         const norm = (s: string) =>
           (s || '')
             .toLowerCase()
-            .replace(/^(ngân hàng|bank|biz)\s*/i, '')
-            .replace(/\s*(bank|business|efast|direct|neobiz|one biz)\s*$/i, '')
-            .trim();
+            .replace(/[^a-z0-9]/g, '')
+            .replace(/nganhang|bank|biz|business|efast|direct|neobiz|onebiz/g, '');
 
         const dbBankNames = new Set(dbList.map((p) => norm(p.bank_name || '')));
 
