@@ -28,11 +28,18 @@ async def execute_crawl_job(job_id: str, date_from_str: str = "2024-01-01", date
     website_adapter = WebsiteAdapter(max_pages=3)
     facebook_adapter = FacebookAdapter()
 
-    # Target banks to scan
+    # Target banks to scan (Top 10 Vietnamese Banks - Corporate / Enterprise)
     sample_targets = [
-        {"bank": "Techcombank", "type": "website", "url": "https://www.techcombank.com.vn"},
-        {"bank": "VietinBank", "type": "website", "url": "https://www.vietinbank.vn"},
-        {"bank": "VPBank", "type": "website", "url": "https://www.vpbank.com.vn"},
+        {"bank": "MB Bank", "type": "website", "url": "https://business.mbbank.com.vn"},
+        {"bank": "BIDV", "type": "website", "url": "https://www.bidv.com.vn/vi/khach-hang-doanh-nghiep"},
+        {"bank": "Vietcombank", "type": "website", "url": "https://www.vietcombank.com.vn/khach-hang-doanh-nghiep"},
+        {"bank": "VietinBank", "type": "website", "url": "https://www.vietinbank.vn/web/home/vn/product/corporate"},
+        {"bank": "Agribank", "type": "website", "url": "https://www.agribank.com.vn/vn/khach-hang-doanh-nghiep"},
+        {"bank": "Techcombank", "type": "website", "url": "https://techcombank.com/khach-hang-doanh-nghiep"},
+        {"bank": "ACB", "type": "website", "url": "https://www.acb.com.vn/san-pham-dich-vu/khach-hang-doanh-nghiep"},
+        {"bank": "VPBank", "type": "website", "url": "https://www.vpbank.com.vn/doanh-nghiep"},
+        {"bank": "SHB", "type": "website", "url": "https://www.shb.com.vn/khach-hang-doanh-nghiep"},
+        {"bank": "Sacombank", "type": "website", "url": "https://www.sacombank.com.vn/doanh-nghiep"},
     ]
 
     all_raw_items: list[RawItem] = []
