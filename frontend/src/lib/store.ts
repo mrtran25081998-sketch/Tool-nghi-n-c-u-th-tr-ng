@@ -23,7 +23,11 @@ import type {
   IntelligenceItem,
   SourceAlert,
   ScanJobDetail,
+  ScanMetrics,
+  SourceExecutionResult,
 } from '../types/index.ts';
+import { crawlBankWebsite } from './crawler/serverCrawler';
+import { crawlBankFacebook } from './crawler/facebookConnector';
 import {
   DEFAULT_ORG_ID,
   INITIAL_BANKS,
@@ -411,6 +415,7 @@ class Store {
 
   // --- BANKING INTELLIGENCE ITEMS ---
   async getIntelligenceItems(params?: {
+    scan_id?: string;
     date_from?: string;
     date_to?: string;
     bank_ids?: string[];
@@ -436,6 +441,8 @@ class Store {
             category: d.category,
             summary: d.summary,
             audience: d.audience || 'Doanh nghiệp',
+            audienceReason: d.audience_reason,
+            dateReason: d.date_reason,
             websiteUrl: d.website_url,
             facebookUrl: d.facebook_url,
             sourceTypes: d.source_types || ['website'],
@@ -452,6 +459,11 @@ class Store {
       } catch (err) {
         console.warn('Supabase intelligence_items query skipped, using memory store', err);
       }
+    }
+
+    // 0. Scan ID filter if requested
+    if (params?.scan_id) {
+      items = items.filter((i) => i.scanId === params.scan_id);
     }
 
     // 1. Mode filter: Live Mode strictly requires authentic non-demo items
@@ -605,35 +617,241 @@ class Store {
 
   private async runScanPipelineAsync(job: ScanJobDetail) {
     const allBanks = await this.getBanks();
-    const bankTargets = allBanks.filter((b) => job.selectedBanks.includes(b.id) || job.selectedBanks.includes(b.name));
-    const targetList = bankTargets.length > 0 ? bankTargets : allBanks.slice(0, job.selectedBanks.length || 5);
+    const allSources = await this.getSourcePairs();
+
+    // Identify target banks
+    const bankTargets = allBanks.filter(
+      (b) => job.selectedBanks.includes(b.id) || job.selectedBanks.includes(b.name)
+    );
+    const targetList = bankTargets.length > 0 ? bankTargets : allBanks;
     const total = targetList.length;
 
+    const metrics: ScanMetrics = {
+      selectedBanks: total,
+      selectedSources: total * (job.sourceTypes.length || 1),
+      sourcesAttempted: 0,
+      sourcesSucceeded: 0,
+      sourcesFailed: 0,
+      pagesDiscovered: 0,
+      pagesFetched: 0,
+      itemsParsed: 0,
+      itemsRejectedByDate: 0,
+      itemsRejectedByAudience: 0,
+      itemsMissingDate: 0,
+      itemsDeduplicated: 0,
+      itemsSaved: 0,
+    };
+    const sourceResults: SourceExecutionResult[] = [];
+    const createdItems: IntelligenceItem[] = [];
+
+    job.metrics = metrics;
+    job.sourceResults = sourceResults;
+
     for (let idx = 0; idx < total; idx++) {
-      // Check if job was cancelled
       const current = this.scanJobDetails.find((j) => j.id === job.id);
-      if (!current || current.status === 'cancelled') {
-        return;
-      }
+      if (!current || current.status === 'cancelled') return;
 
       const bank = targetList[idx];
-      const progress = Math.min(95, Math.round(15 + ((idx + 1) / total) * 75));
+      const sourcePair = allSources.find(
+        (sp) => sp.bank_id === bank.id || sp.bank_name?.toLowerCase() === bank.name.toLowerCase()
+      );
 
-      current.progressPercent = progress;
+      const websiteUrl = sourcePair?.website_url || (bank as any).website_url || '';
+      const facebookUrl = sourcePair?.facebook_url || (bank as any).facebook_url || '';
+
       current.currentBankName = bank.name;
       current.currentStage = `Đang quét ngân hàng ${idx + 1}/${total} – ${bank.name}`;
+      current.progressPercent = Math.min(95, Math.round(10 + ((idx + 1) / total) * 80));
 
-      // Simulate step delay for real progress visibility
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      const tasks: Promise<any>[] = [];
+
+      // 1. Website Crawl task
+      if (job.sourceTypes.includes('website')) {
+        metrics.sourcesAttempted++;
+        tasks.push(
+          crawlBankWebsite({
+            bankId: bank.id,
+            bankName: bank.name,
+            corporateHomepageUrl: websiteUrl,
+            dateFrom: job.dateFrom,
+            dateTo: job.dateTo,
+            maxPages: 4,
+          }).then((res) => ({ type: 'website' as const, res }))
+        );
+      }
+
+      // 2. Facebook Crawl task
+      if (job.sourceTypes.includes('facebook')) {
+        metrics.sourcesAttempted++;
+        tasks.push(
+          crawlBankFacebook({
+            bankId: bank.id,
+            bankName: bank.name,
+            facebookUrl,
+            dateFrom: job.dateFrom,
+            dateTo: job.dateTo,
+          }).then((res) => ({ type: 'facebook' as const, res }))
+        );
+      }
+
+      const settled = await Promise.allSettled(tasks);
+
+      let bankWebsiteArticles: any[] = [];
+      let bankFacebookArticles: any[] = [];
+
+      for (const r of settled) {
+        if (r.status === 'fulfilled') {
+          const { type, res } = r.value;
+          metrics.pagesDiscovered += res.pagesDiscovered || 0;
+          metrics.pagesFetched += res.pagesFetched || 0;
+          metrics.itemsParsed += res.itemsParsed || 0;
+          metrics.itemsRejectedByDate += res.itemsRejectedByDate || 0;
+          metrics.itemsRejectedByAudience += res.itemsRejectedByAudience || 0;
+          metrics.itemsMissingDate += res.itemsMissingDate || 0;
+
+          if (res.status === 'success' || res.status === 'partial') {
+            metrics.sourcesSucceeded++;
+          } else if (res.status === 'failed' || res.status === 'unavailable') {
+            metrics.sourcesFailed++;
+          }
+
+          sourceResults.push({
+            bankId: bank.id,
+            bankName: bank.name,
+            sourceType: type,
+            status: res.status,
+            url: res.sourceUrl,
+            httpStatus: res.httpStatus,
+            discoveredCount: res.pagesDiscovered || 0,
+            savedCount: res.articles?.length || 0,
+            errorCode: res.errorCode,
+            errorMessage: res.errorMessage,
+          });
+
+          if (type === 'website') bankWebsiteArticles = res.articles || [];
+          if (type === 'facebook') bankFacebookArticles = res.articles || [];
+
+          // Add alert if source failed or unavailable
+          if (res.errorCode && res.errorCode !== 'INVALID_URL') {
+            this.sourceAlerts.unshift({
+              id: 'alert-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+              bankId: bank.id,
+              bankName: bank.name,
+              sourceType: type,
+              errorCause: res.errorMessage || res.errorCode,
+              httpStatus: res.httpStatus || undefined,
+              checkedAt: new Date().toISOString(),
+              resolved: false,
+            });
+          }
+        } else {
+          metrics.sourcesFailed++;
+          sourceResults.push({
+            bankId: bank.id,
+            bankName: bank.name,
+            sourceType: 'website',
+            status: 'failed',
+            url: websiteUrl,
+            httpStatus: 0,
+            discoveredCount: 0,
+            savedCount: 0,
+            errorCode: 'EXECUTION_EXCEPTION',
+            errorMessage: r.reason?.message || 'Lỗi xử lý khi quét nguồn',
+          });
+        }
+      }
+
+      // Deduplication & Merge Website + Facebook
+      const mergedForBank: IntelligenceItem[] = [];
+
+      for (const art of bankWebsiteArticles) {
+        const item: IntelligenceItem = {
+          id: 'item-' + Buffer.from(art.url).toString('base64url').slice(0, 24),
+          bankId: bank.id,
+          bankName: bank.name,
+          publishedAt: art.publishedAt || '',
+          title: art.title,
+          category: art.category,
+          summary: art.description || art.content.slice(0, 250),
+          audience: art.audience,
+          audienceReason: art.audienceReason,
+          dateReason: art.hasDate ? undefined : 'DATE_NOT_FOUND',
+          websiteUrl: art.url,
+          sourceTypes: ['website'],
+          verificationStatus: art.hasDate ? 'verified' : 'review',
+          confidenceScore: art.confidenceScore,
+          collectedAt: new Date().toISOString(),
+          scanId: job.id,
+          isDemo: false, // Authentic Live item!
+        };
+
+        // Check if matching facebook article exists
+        const fbMatchIdx = bankFacebookArticles.findIndex(
+          (fb) => fb.title.slice(0, 30).toLowerCase() === art.title.slice(0, 30).toLowerCase()
+        );
+        if (fbMatchIdx >= 0) {
+          const fbMatch = bankFacebookArticles[fbMatchIdx];
+          item.facebookUrl = fbMatch.url;
+          item.sourceTypes.push('facebook');
+          metrics.itemsDeduplicated++;
+          bankFacebookArticles.splice(fbMatchIdx, 1);
+        }
+
+        mergedForBank.push(item);
+      }
+
+      for (const fb of bankFacebookArticles) {
+        mergedForBank.push({
+          id: 'item-' + Buffer.from(fb.url).toString('base64url').slice(0, 24),
+          bankId: bank.id,
+          bankName: bank.name,
+          publishedAt: fb.publishedAt || '',
+          title: fb.title,
+          category: fb.category,
+          summary: fb.description || fb.content.slice(0, 250),
+          audience: fb.audience,
+          audienceReason: fb.audienceReason,
+          dateReason: fb.hasDate ? undefined : 'DATE_NOT_FOUND',
+          facebookUrl: fb.url,
+          sourceTypes: ['facebook'],
+          verificationStatus: fb.hasDate ? 'verified' : 'review',
+          confidenceScore: fb.confidenceScore,
+          collectedAt: new Date().toISOString(),
+          scanId: job.id,
+          isDemo: false,
+        });
+      }
+
+      for (const item of mergedForBank) {
+        await this.addIntelligenceItem(item);
+        createdItems.push(item);
+        metrics.itemsSaved++;
+      }
     }
 
     const current = this.scanJobDetails.find((j) => j.id === job.id);
     if (current && current.status !== 'cancelled') {
-      current.status = 'completed';
+      let finalStatus: ScanJobDetail['status'] = 'completed';
+      if (metrics.sourcesFailed === 0 && metrics.itemsSaved > 0) {
+        finalStatus = 'success';
+      } else if (metrics.sourcesSucceeded > 0 && metrics.itemsSaved > 0) {
+        finalStatus = 'partial';
+      } else if (metrics.itemsSaved === 0 && metrics.sourcesSucceeded > 0) {
+        finalStatus = 'empty';
+      } else if (metrics.sourcesSucceeded === 0) {
+        finalStatus = 'failed';
+      }
+
+      current.status = finalStatus;
       current.progressPercent = 100;
-      current.currentStage = 'Đã hoàn tất quét và tổng hợp dữ liệu!';
+      current.currentStage =
+        metrics.itemsSaved > 0
+          ? `Đã hoàn tất quét! Thu thập thành công ${metrics.itemsSaved} bản ghi doanh nghiệp.`
+          : `Lượt quét hoàn thành nhưng không tìm thấy nội dung phù hợp trong khoảng ngày.`;
       current.finishedAt = new Date().toISOString();
-      current.totalFound = this.intelligenceItems.length;
+      current.totalFound = metrics.itemsSaved;
+      current.metrics = metrics;
+      current.sourceResults = sourceResults;
     }
   }
 
