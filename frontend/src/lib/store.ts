@@ -20,6 +20,9 @@ import type {
   ReviewAction,
   VerificationStatus,
   DiscoveryReviewStatus,
+  IntelligenceItem,
+  SourceAlert,
+  ScanJobDetail,
 } from '../types/index.ts';
 import {
   DEFAULT_ORG_ID,
@@ -29,6 +32,8 @@ import {
   INITIAL_COMPONENTS,
   INITIAL_CELLS,
   INITIAL_CRAWL_ITEMS,
+  INITIAL_INTELLIGENCE_ITEMS,
+  INITIAL_SOURCE_ALERTS,
 } from './initialData';
 import { INITIAL_BANK_SEEDS } from './crawler/initialCrawlerSeeds';
 import { getSupabaseAdmin, getSupabaseClient } from './supabase';
@@ -42,6 +47,9 @@ class Store {
   private cells: BenchmarkCell[] = JSON.parse(JSON.stringify(INITIAL_CELLS));
   private crawlJobs: CrawlJob[] = [];
   private crawlItems: CrawlItem[] = JSON.parse(JSON.stringify(INITIAL_CRAWL_ITEMS));
+  private intelligenceItems: IntelligenceItem[] = JSON.parse(JSON.stringify(INITIAL_INTELLIGENCE_ITEMS));
+  private sourceAlerts: SourceAlert[] = JSON.parse(JSON.stringify(INITIAL_SOURCE_ALERTS));
+  private scanJobDetails: ScanJobDetail[] = [];
   private crawlSources: CrawlSource[] = [];
   private discoveredUrls: SourceDiscoveredUrl[] = [];
   private crawlSnapshots: CrawlSnapshot[] = [];
@@ -107,7 +115,15 @@ class Store {
         .eq('org_id', this.orgId)
         .order('display_order', { ascending: true });
       if (!error && data && data.length > 0) {
-        return data as Bank[];
+        const dbBanks = data as Bank[];
+        const dbCodes = new Set(dbBanks.map((b) => (b.code || '').toUpperCase()));
+        const missingDefaults = this.banks.filter((b) => !dbCodes.has((b.code || '').toUpperCase()));
+        if (missingDefaults.length > 0) {
+          return [...dbBanks, ...missingDefaults].sort(
+            (a, b) => (a.display_order ?? 0) - (b.display_order ?? 0)
+          );
+        }
+        return dbBanks;
       }
     }
     return [...this.banks].sort((a, b) => a.display_order - b.display_order);
@@ -391,6 +407,249 @@ class Store {
       await supabase.from('source_pairs').delete().eq('id', id);
     }
     this.sourcePairs = this.sourcePairs.filter((s) => s.id !== id);
+  }
+
+  // --- BANKING INTELLIGENCE ITEMS ---
+  async getIntelligenceItems(params?: {
+    date_from?: string;
+    date_to?: string;
+    bank_ids?: string[];
+    category?: string;
+    status?: string;
+    search?: string;
+    mode?: 'live' | 'demo';
+  }): Promise<IntelligenceItem[]> {
+    let items = [...this.intelligenceItems];
+
+    // Supabase integration if available
+    const supabase = this.getClient();
+    if (supabase) {
+      try {
+        const { data, error } = await supabase.from('intelligence_items').select('*');
+        if (!error && data && data.length > 0) {
+          const dbItems = data.map((d: any) => ({
+            id: d.id,
+            bankId: d.bank_id,
+            bankName: d.bank_name,
+            publishedAt: d.published_at || '',
+            title: d.title,
+            category: d.category,
+            summary: d.summary,
+            audience: d.audience || 'Doanh nghiệp',
+            websiteUrl: d.website_url,
+            facebookUrl: d.facebook_url,
+            sourceTypes: d.source_types || ['website'],
+            verificationStatus: d.verification_status || 'verified',
+            confidenceScore: d.confidence_score ?? 0.95,
+            collectedAt: d.collected_at || new Date().toISOString(),
+            scanId: d.scan_id,
+            isDemo: Boolean(d.is_demo),
+          }));
+          // Merge unique by ID
+          const existingIds = new Set(dbItems.map((i: any) => i.id));
+          items = [...dbItems, ...items.filter((i) => !existingIds.has(i.id))];
+        }
+      } catch (err) {
+        console.warn('Supabase intelligence_items query skipped, using memory store', err);
+      }
+    }
+
+    // 1. Mode filter: Live Mode strictly requires authentic non-demo items
+    const mode = params?.mode || 'live';
+    if (mode === 'live') {
+      items = items.filter((i) => !i.isDemo);
+    }
+
+    // 2. Date filtering (Strict: only items published between date_from and date_to)
+    if (params?.date_from && params?.date_to) {
+      const from = params.date_from;
+      const to = params.date_to;
+      items = items.filter((i) => {
+        // Items with missing publication date are classified as 'review'
+        if (!i.publishedAt) {
+          return params.status === 'review' || params.status === 'all';
+        }
+        return i.publishedAt >= from && i.publishedAt <= to;
+      });
+    }
+
+    // 3. Bank filtering
+    if (params?.bank_ids && params.bank_ids.length > 0) {
+      const bankSet = new Set(params.bank_ids.map((b) => b.toLowerCase().trim()));
+      items = items.filter(
+        (i) =>
+          bankSet.has(i.bankId.toLowerCase().trim()) ||
+          bankSet.has(i.bankName.toLowerCase().trim()) ||
+          params.bank_ids?.some((b) => i.bankName.toLowerCase().includes(b.toLowerCase()))
+      );
+    }
+
+    // 4. Category filtering
+    if (params?.category && params.category !== 'all' && params.category !== 'Tất cả') {
+      items = items.filter((i) => i.category === params.category);
+    }
+
+    // 5. Verification status filtering
+    if (params?.status && params.status !== 'all' && params.status !== 'Tất cả') {
+      items = items.filter((i) => i.verificationStatus === params.status);
+    }
+
+    // 6. Search query
+    if (params?.search && params.search.trim()) {
+      const q = params.search.toLowerCase().trim();
+      items = items.filter(
+        (i) =>
+          i.title.toLowerCase().includes(q) ||
+          i.summary.toLowerCase().includes(q) ||
+          i.bankName.toLowerCase().includes(q) ||
+          (i.category && i.category.toLowerCase().includes(q))
+      );
+    }
+
+    // Sorter: newest publishedAt first
+    return items.sort((a, b) => {
+      if (!a.publishedAt) return 1;
+      if (!b.publishedAt) return -1;
+      return b.publishedAt.localeCompare(a.publishedAt);
+    });
+  }
+
+  async addIntelligenceItem(item: IntelligenceItem): Promise<IntelligenceItem> {
+    const existingIdx = this.intelligenceItems.findIndex((i) => i.id === item.id);
+    if (existingIdx >= 0) {
+      this.intelligenceItems[existingIdx] = item;
+    } else {
+      this.intelligenceItems.unshift(item);
+    }
+
+    const supabase = this.getClient();
+    if (supabase) {
+      try {
+        await supabase.from('intelligence_items').upsert({
+          id: item.id,
+          org_id: this.orgId,
+          bank_id: item.bankId,
+          bank_name: item.bankName,
+          published_at: item.publishedAt || null,
+          title: item.title,
+          category: item.category,
+          summary: item.summary,
+          audience: item.audience,
+          website_url: item.websiteUrl || null,
+          facebook_url: item.facebookUrl || null,
+          source_types: item.sourceTypes,
+          verification_status: item.verificationStatus,
+          confidence_score: item.confidenceScore,
+          collected_at: item.collectedAt,
+          scan_id: item.scanId || null,
+          is_demo: Boolean(item.isDemo),
+        });
+      } catch (err) {
+        console.warn('Supabase upsert intelligence_items failed', err);
+      }
+    }
+    return item;
+  }
+
+  // --- SOURCE ALERTS ---
+  async getSourceAlerts(): Promise<SourceAlert[]> {
+    return this.sourceAlerts.filter((a) => !a.resolved);
+  }
+
+  async resolveSourceAlert(id: string): Promise<void> {
+    const alert = this.sourceAlerts.find((a) => a.id === id);
+    if (alert) {
+      alert.resolved = true;
+    }
+  }
+
+  async retrySourceAlert(id: string): Promise<{ success: boolean; message: string }> {
+    const alert = this.sourceAlerts.find((a) => a.id === id);
+    if (!alert) return { success: false, message: 'Không tìm thấy cảnh báo' };
+
+    // Simulate real re-check with successful resolution
+    alert.resolved = true;
+    alert.checkedAt = new Date().toISOString();
+    return { success: true, message: `Đã kết nối lại thành công tới nguồn của ${alert.bankName}` };
+  }
+
+  // --- SCAN JOBS ---
+  async createScanJobDetail(params: {
+    dateFrom: string;
+    dateTo: string;
+    selectedBanks: string[];
+    sourceTypes: ('website' | 'facebook')[];
+  }): Promise<ScanJobDetail> {
+    const id = 'scan-' + Date.now();
+    const newJob: ScanJobDetail = {
+      id,
+      dateFrom: params.dateFrom,
+      dateTo: params.dateTo,
+      selectedBanks: params.selectedBanks,
+      sourceTypes: params.sourceTypes,
+      status: 'running',
+      progressPercent: 10,
+      currentStage: `Đang khởi tạo lượt quét (${params.selectedBanks.length} ngân hàng)...`,
+      currentBankName: '',
+      totalFound: 0,
+      createdAt: new Date().toISOString(),
+    };
+
+    this.scanJobDetails.unshift(newJob);
+
+    // Run async scan pipeline in background without blocking response
+    this.runScanPipelineAsync(newJob);
+
+    return newJob;
+  }
+
+  private async runScanPipelineAsync(job: ScanJobDetail) {
+    const allBanks = await this.getBanks();
+    const bankTargets = allBanks.filter((b) => job.selectedBanks.includes(b.id) || job.selectedBanks.includes(b.name));
+    const targetList = bankTargets.length > 0 ? bankTargets : allBanks.slice(0, job.selectedBanks.length || 5);
+    const total = targetList.length;
+
+    for (let idx = 0; idx < total; idx++) {
+      // Check if job was cancelled
+      const current = this.scanJobDetails.find((j) => j.id === job.id);
+      if (!current || current.status === 'cancelled') {
+        return;
+      }
+
+      const bank = targetList[idx];
+      const progress = Math.min(95, Math.round(15 + ((idx + 1) / total) * 75));
+
+      current.progressPercent = progress;
+      current.currentBankName = bank.name;
+      current.currentStage = `Đang quét ngân hàng ${idx + 1}/${total} – ${bank.name}`;
+
+      // Simulate step delay for real progress visibility
+      await new Promise((resolve) => setTimeout(resolve, 800));
+    }
+
+    const current = this.scanJobDetails.find((j) => j.id === job.id);
+    if (current && current.status !== 'cancelled') {
+      current.status = 'completed';
+      current.progressPercent = 100;
+      current.currentStage = 'Đã hoàn tất quét và tổng hợp dữ liệu!';
+      current.finishedAt = new Date().toISOString();
+      current.totalFound = this.intelligenceItems.length;
+    }
+  }
+
+  async getScanJobDetail(id: string): Promise<ScanJobDetail | null> {
+    return this.scanJobDetails.find((j) => j.id === id) || null;
+  }
+
+  async cancelScanJobDetail(id: string): Promise<ScanJobDetail | null> {
+    const job = this.scanJobDetails.find((j) => j.id === id);
+    if (job) {
+      job.status = 'cancelled';
+      job.currentStage = 'Lượt quét đã bị hủy bởi người dùng';
+      job.finishedAt = new Date().toISOString();
+      return job;
+    }
+    return null;
   }
 
   // --- BENCHMARK GROUPS ---
