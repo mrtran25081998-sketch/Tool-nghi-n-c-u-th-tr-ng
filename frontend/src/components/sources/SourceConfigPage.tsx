@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   RefreshCw,
   Trash2,
@@ -13,6 +13,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   X,
+  Search,
 } from 'lucide-react';
 import { SourcePair } from '@/types';
 import AddBankModal from './AddBankModal';
@@ -157,9 +158,14 @@ export default function SourceConfigPage({ initialSources }: SourceConfigPagePro
   const [saving, setSaving] = useState(false);
   const [synced, setSynced] = useState(true);
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
+  const [testingId, setTestingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeletePair, setConfirmDeletePair] = useState<SourcePair | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [toast, setToast] = useState<{ msg: string; type: 'ok' | 'err' } | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
 
   const showToast = (msg: string, type: 'ok' | 'err' = 'ok') => {
     setToast({ msg, type });
@@ -176,6 +182,19 @@ export default function SourceConfigPage({ initialSources }: SourceConfigPagePro
   }, 0);
   const healthyCount = sources.filter((s) => rows[s.id]?.active !== false).length;
 
+  // Filtered and paginated sources
+  const filteredSources = useMemo(() => {
+    if (!searchTerm.trim()) return sources;
+    const q = searchTerm.toLowerCase().trim();
+    return sources.filter((s) => (s.bank_name || '').toLowerCase().includes(q));
+  }, [sources, searchTerm]);
+
+  const totalPages = Math.ceil(filteredSources.length / pageSize) || 1;
+  const paginatedSources = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredSources.slice(start, start + pageSize);
+  }, [filteredSources, currentPage, pageSize]);
+
   /* ── handlers ── */
   const setField = (id: string, field: 'websiteUrl' | 'facebookUrl', val: string) => {
     setSynced(false);
@@ -185,6 +204,27 @@ export default function SourceConfigPage({ initialSources }: SourceConfigPagePro
   const toggleActive = (id: string) => {
     setSynced(false);
     setRows((prev) => ({ ...prev, [id]: { ...prev[id], active: !prev[id].active, dirty: true } }));
+  };
+
+  const handleTestBank = async (bankId: string, bankName: string) => {
+    setTestingId(bankId);
+    try {
+      const res = await fetch(`/api/banks/${bankId}/test-source`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'all' }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        showToast(`✅ Kết nối tốt tới ${bankName} (${json.data.latency_ms}ms)`, 'ok');
+      } else {
+        showToast(`❌ Lỗi kết nối: ${json.error}`, 'err');
+      }
+    } catch {
+      showToast('Không thể kiểm tra kết nối', 'err');
+    } finally {
+      setTestingId(null);
+    }
   };
 
   const handleRefresh = useCallback(
@@ -241,9 +281,11 @@ export default function SourceConfigPage({ initialSources }: SourceConfigPagePro
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Xác nhận xoá nguồn ngân hàng này?')) return;
+  const confirmAndExecuteDelete = async () => {
+    if (!confirmDeletePair) return;
+    const id = confirmDeletePair.id;
     setDeletingId(id);
+    setConfirmDeletePair(null);
     try {
       const res = await fetch(`/api/source-pairs/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error();
@@ -253,7 +295,7 @@ export default function SourceConfigPage({ initialSources }: SourceConfigPagePro
         delete next[id];
         return next;
       });
-      showToast('Đã xoá nguồn ngân hàng', 'ok');
+      showToast('Đã xoá cả cấu hình Website và Facebook của ngân hàng', 'ok');
     } catch {
       showToast('Xoá thất bại', 'err');
     } finally {
@@ -348,8 +390,7 @@ export default function SourceConfigPage({ initialSources }: SourceConfigPagePro
               Nguồn Website và Facebook chính thức
             </h2>
             <p className="text-[12px] text-[#667085] mt-0.5">
-              Có thể thêm tối đa {MAX_BANKS} ngân hàng. URL trang chủ/fanpage dùng làm điểm bắt
-              đầu; kết quả chỉ ghi nhận permalink bài chi tiết.
+              Quản lý toàn bộ danh sách ngân hàng đối thủ và liên kết Website / Fanpage Doanh nghiệp phục vụ quét tự động.
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -357,7 +398,7 @@ export default function SourceConfigPage({ initialSources }: SourceConfigPagePro
               type="button"
               onClick={handleSave}
               disabled={saving || synced}
-              className="flex items-center gap-1.5 px-4 py-2 text-[12px] font-bold rounded-lg border border-[#c9d8f0] bg-white text-[#344054] hover:bg-[#f7f9fc] disabled:opacity-50 transition-colors"
+              className="flex items-center gap-1.5 px-4 py-2 text-[12px] font-bold rounded-lg border border-[#c9d8f0] bg-white text-[#344054] hover:bg-[#f7f9fc] disabled:opacity-50 transition-colors cursor-pointer"
             >
               <Save className="w-3.5 h-3.5" />
               {saving ? 'Đang lưu...' : 'Lưu cấu hình'}
@@ -365,11 +406,10 @@ export default function SourceConfigPage({ initialSources }: SourceConfigPagePro
             <button
               type="button"
               onClick={() => setIsModalOpen(true)}
-              disabled={sources.length >= MAX_BANKS}
-              className="flex items-center gap-1.5 px-4 py-2 text-[12px] font-bold rounded-lg bg-gradient-to-r from-[#2465ed] to-[#1646d8] text-white hover:opacity-90 disabled:opacity-50 transition-opacity shadow-sm"
+              className="flex items-center gap-1.5 px-4 py-2 text-[12px] font-bold rounded-lg bg-gradient-to-r from-[#2465ed] to-[#1646d8] text-white hover:opacity-90 transition-opacity shadow-sm cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
-              Thêm ngân hàng
+              Thêm nguồn
             </button>
           </div>
         </div>
@@ -399,11 +439,31 @@ export default function SourceConfigPage({ initialSources }: SourceConfigPagePro
           />
         </div>
 
+        {/* Search Bar */}
+        <div className="px-6 py-3 border-b border-[#edf1f8] flex flex-wrap items-center justify-between gap-3 bg-white">
+          <div className="relative flex-1 max-w-sm">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-[#98a2b3]" />
+            <input
+              type="text"
+              placeholder="Tìm ngân hàng theo tên..."
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full pl-8 pr-3 py-1.5 text-xs rounded-lg border border-[#d0d5dd] focus:outline-none focus:border-[#1646d8]"
+            />
+          </div>
+          <div className="text-xs text-[#667085]">
+            Hiển thị <span className="font-bold text-[#0f2357]">{filteredSources.length}</span> ngân hàng
+          </div>
+        </div>
+
         {/* Table */}
-        {sources.length === 0 ? (
+        {filteredSources.length === 0 ? (
           <div className="py-16 flex flex-col items-center gap-3 text-[#98a2b3]">
             <Building2 className="w-10 h-10 opacity-40" />
-            <span className="text-sm font-medium">Chưa có nguồn nào. Nhấn "+ Thêm ngân hàng" để bắt đầu.</span>
+            <span className="text-sm font-medium">Không tìm thấy ngân hàng phù hợp.</span>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -419,13 +479,13 @@ export default function SourceConfigPage({ initialSources }: SourceConfigPagePro
                   <th className="text-left px-4 py-3 text-[10.5px] font-extrabold text-[#667085] tracking-wider uppercase">
                     Facebook chính thức
                   </th>
-                  <th className="text-left px-4 py-3 text-[10.5px] font-extrabold text-[#667085] tracking-wider uppercase w-[180px]">
-                    Trạng thái
+                  <th className="text-left px-4 py-3 text-[10.5px] font-extrabold text-[#667085] tracking-wider uppercase w-[230px]">
+                    Trạng thái & Thao tác
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#edf1f8]">
-                {sources.map((s) => {
+                {paginatedSources.map((s: SourcePair) => {
                   const row = rows[s.id] ?? {
                     websiteUrl: s.website_url,
                     facebookUrl: s.facebook_url,
@@ -435,6 +495,7 @@ export default function SourceConfigPage({ initialSources }: SourceConfigPagePro
                   const colors = logoColor(s.bank_name ?? s.id);
                   const initials = bankInitials(s.bank_name ?? '?');
                   const isDeleting = deletingId === s.id;
+                  const isTesting = testingId === (s.bank_id || s.id);
 
                   return (
                     <tr
@@ -489,7 +550,7 @@ export default function SourceConfigPage({ initialSources }: SourceConfigPagePro
                         </div>
                       </td>
 
-                      {/* Status */}
+                      {/* Status & Actions */}
                       <td className="px-4 py-3.5">
                         <div className="flex items-center gap-2">
                           {/* Status badge */}
@@ -500,7 +561,7 @@ export default function SourceConfigPage({ initialSources }: SourceConfigPagePro
                                 : 'bg-[#f2f5fa] text-[#667085] border border-[#d9e2f2]'
                             }`}
                           >
-                            {row.active ? 'Cần kiểm tra' : 'Tắt'}
+                            {row.active ? 'Hoạt động' : 'Tắt'}
                           </span>
 
                           {/* Toggle */}
@@ -508,23 +569,35 @@ export default function SourceConfigPage({ initialSources }: SourceConfigPagePro
                             type="button"
                             onClick={() => toggleActive(s.id)}
                             aria-label="Bật/tắt nguồn"
-                            className={`relative w-9 h-5 rounded-full transition-colors shrink-0 ${
+                            className={`relative w-8 h-4.5 rounded-full transition-colors shrink-0 cursor-pointer ${
                               row.active ? 'bg-[#1646d8]' : 'bg-[#d0d5dd]'
                             }`}
                           >
                             <span
-                              className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${
-                                row.active ? 'translate-x-4' : 'translate-x-0'
+                              className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                                row.active ? 'translate-x-3.5' : 'translate-x-0'
                               }`}
                             />
+                          </button>
+
+                          {/* Quét thử từng nguồn */}
+                          <button
+                            type="button"
+                            onClick={() => handleTestBank(s.bank_id || s.id, s.bank_name || '')}
+                            disabled={isTesting}
+                            title="Quét thử kết nối nguồn Website và Facebook"
+                            className="px-2 py-1 rounded-md bg-[#eef5ff] hover:bg-[#dfeeff] text-[#1646d8] text-[11px] font-bold transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50 shrink-0"
+                          >
+                            <RefreshCw className={`w-3 h-3 ${isTesting ? 'animate-spin' : ''}`} />
+                            {isTesting ? 'Đang thử' : 'Quét thử'}
                           </button>
 
                           {/* Delete */}
                           <button
                             type="button"
-                            onClick={() => handleDelete(s.id)}
-                            title="Xoá nguồn này"
-                            className="w-7 h-7 flex items-center justify-center rounded-lg text-[#ef3f4b] hover:bg-[#fff0f1] transition-colors shrink-0"
+                            onClick={() => setConfirmDeletePair(s)}
+                            title="Xoá ngân hàng này"
+                            className="w-7 h-7 flex items-center justify-center rounded-lg text-[#ef3f4b] hover:bg-[#fff0f1] transition-colors shrink-0 cursor-pointer"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -537,7 +610,67 @@ export default function SourceConfigPage({ initialSources }: SourceConfigPagePro
             </table>
           </div>
         )}
+
+        {/* Pagination Controls */}
+        {totalPages > 1 && (
+          <div className="px-6 py-3 border-t border-[#edf1f8] flex items-center justify-between text-xs text-[#667085] bg-[#fafbff]">
+            <span>
+              Trang <span className="font-bold text-[#0f2357]">{currentPage}</span> / {totalPages}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                className="px-3 py-1 rounded-md border border-[#d0d5dd] bg-white font-medium hover:bg-gray-50 disabled:opacity-40 cursor-pointer"
+              >
+                Trang trước
+              </button>
+              <button
+                type="button"
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                className="px-3 py-1 rounded-md border border-[#d0d5dd] bg-white font-medium hover:bg-gray-50 disabled:opacity-40 cursor-pointer"
+              >
+                Trang sau
+              </button>
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {confirmDeletePair && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-gray-100">
+            <div className="w-11 h-11 rounded-xl bg-red-100 text-red-600 flex items-center justify-center mb-4">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <h3 className="text-base font-bold text-[#0f2357] mb-2">
+              Xóa ngân hàng {confirmDeletePair.bank_name}?
+            </h3>
+            <p className="text-xs text-[#667085] leading-relaxed mb-6">
+              Xóa hàng này sẽ xóa đồng thời cấu hình của cả <strong>Website</strong> và <strong>Facebook</strong> của ngân hàng khỏi hệ thống quét. Bạn có chắc chắn muốn xóa?
+            </p>
+            <div className="flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirmDeletePair(null)}
+                className="px-4 py-2 rounded-xl border border-gray-200 text-xs font-semibold text-gray-600 hover:bg-gray-50 cursor-pointer"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={confirmAndExecuteDelete}
+                className="px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-sm cursor-pointer"
+              >
+                Xác nhận xóa cả 2 nguồn
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Add Bank Modal ── */}
       <AddBankModal
