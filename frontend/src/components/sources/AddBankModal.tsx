@@ -48,9 +48,9 @@ export default function AddBankModal({ isOpen, onClose, onSubmit }: AddBankModal
             </div>
             <div>
               <h3 className="text-[14px] font-extrabold text-[#0f2357] leading-tight">
-                Thêm ngân hàng
+                Thêm nguồn ngân hàng
               </h3>
-              <p className="text-[11px] text-[#667085]">Cấu hình nguồn Website và Facebook</p>
+              <p className="text-[11px] text-[#667085]">Cấu hình nguồn Website và Facebook doanh nghiệp</p>
             </div>
           </div>
           <button
@@ -112,7 +112,7 @@ export default function AddBankModal({ isOpen, onClose, onSubmit }: AddBankModal
           {/* Info note */}
           <div className="p-3 bg-[#f6f9ff] border border-[#e1ecff] rounded-lg text-[11px] text-[#475467] leading-relaxed">
             URL trang chủ/fanpage dùng làm <strong>điểm bắt đầu quét</strong>. Hệ thống sẽ tự khám
-            phá thêm URL con. Có thể để trống một URL và bổ sung sau.
+            phá các trang con về sản phẩm, biểu phí, khuyến mại doanh nghiệp.
           </div>
 
           {/* Actions */}
@@ -128,7 +128,7 @@ export default function AddBankModal({ isOpen, onClose, onSubmit }: AddBankModal
               type="submit"
               className="px-5 py-2 text-[12px] font-bold text-white bg-gradient-to-r from-[#2465ed] to-[#1646d8] rounded-lg hover:opacity-90 shadow-sm transition-opacity"
             >
-              + Thêm ngân hàng
+              + Thêm nguồn
             </button>
           </div>
         </form>
