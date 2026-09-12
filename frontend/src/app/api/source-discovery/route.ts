@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { store } from '@/lib/store';
-import { discoverUrlsForBankSeed } from '@/lib/crawler/sourceDiscovery';
+import { discoverArticleLinks } from '@/lib/crawler/serverCrawler';
+import { SourceDiscoveredUrl } from '@/types';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
@@ -24,9 +27,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'seed_url is required' }, { status: 400 });
     }
 
-    // Run discovery engine
-    const discovered = await discoverUrlsForBankSeed(bankId, bankName, seedUrl);
-    await store.addDiscoveredUrls(discovered);
+    let discovered: SourceDiscoveredUrl[] = [];
+    try {
+      const res = await fetch(seedUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+      });
+      if (res.ok) {
+        const html = await res.text();
+        const links = discoverArticleLinks(html, seedUrl, 15);
+        discovered = links.map((url, idx) => ({
+          id: `disc-${Date.now()}-${idx}`,
+          bank_id: bankId,
+          bank_name: bankName,
+          url,
+          discovered_at: new Date().toISOString(),
+          status: 'TRACKING' as const,
+          source_type: 'website' as const,
+          page_title: url.split('/').filter(Boolean).pop()?.replace(/[-_]/g, ' ') || 'Trang sản phẩm',
+        }));
+        await store.addDiscoveredUrls(discovered);
+      }
+    } catch (crawlErr: any) {
+      console.warn('Source discovery fetch error:', crawlErr);
+    }
 
     return NextResponse.json({ data: discovered, count: discovered.length });
   } catch (err: any) {

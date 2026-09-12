@@ -420,10 +420,33 @@ class Store {
           };
 
           const dbItems: IntelligenceItem[] = data
-            // Exclude test/demo rows inserted during debugging
+            // Exclude test/demo rows, generic homepages, personal banking, and invalid records
             .filter((d: any) => {
-              const t = (d.title || '').toLowerCase();
-              return !t.startsWith('test ') && t !== 'test' && !t.includes('test article');
+              const t = (d.title || '').toLowerCase().trim();
+              const u = (d.canonical_url || d.source_url || '').toLowerCase().trim();
+              const s = (d.summary || '').toLowerCase().trim();
+              const metaAudience = (d.metadata?.audience || '').toLowerCase();
+              return (
+                !t.startsWith('test ') &&
+                t !== 'test' &&
+                !t.includes('test article') &&
+                !u.includes('/chi-tiet/test') &&
+                !s.includes('test summary') &&
+                !t.includes('ngân hàng quân đội | mbbank') &&
+                !t.includes('khách hàng cá nhân') &&
+                !u.includes('/ca-nhan') &&
+                !u.includes('/khcn') &&
+                !u.includes('-khcn') &&
+                !u.includes('/documents') &&
+                !u.includes('/tools_slug') &&
+                !u.includes('/ve-vietcombank') &&
+                !t.includes('moody') &&
+                !t.includes('cuối tuần lộc lá') &&
+                !t.includes('mastercard platinum') &&
+                metaAudience !== 'cá nhân' &&
+                t !== 'undefined' &&
+                t.length > 0
+              );
             })
             .map((d: any) => {
               const meta = d.metadata || {};
@@ -485,9 +508,9 @@ class Store {
       const from = params.date_from;
       const to = params.date_to;
       items = items.filter((i) => {
-        // Items with missing publication date are classified as 'review'
+        // Items with missing publication date are NOT within the requested date range
         if (!i.publishedAt) {
-          return params.status !== 'verified';
+          return false;
         }
         return i.publishedAt >= from && i.publishedAt <= to;
       });

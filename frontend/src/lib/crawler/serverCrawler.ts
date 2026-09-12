@@ -70,29 +70,55 @@ const EXCLUSION_KEYWORDS = [
   'tài khoản thanh toán cá nhân',
   'tiết kiệm cá nhân',
   'vay tiêu dùng cá nhân',
+  'vay tiêu dùng',
   'khách hàng cá nhân',
   'personal banking',
   'retail banking',
-  // Non-business news / investor relations
+  'khcn',
+  // Non-business news / investor relations / PR / rankings
   'tuyển dụng',
   'quan hệ cổ đông',
   'báo cáo thường niên',
+  'báo cáo tài chính',
   'công bố thông tin',
   'đại hội đồng cổ đông',
   'xếp hạng tín nhiệm',
   "moody's",
+  'moody’s',
+  'moodys',
   'fitch ratings',
+  'fitch',
   's&p global',
   'standard & poor',
+  'an sinh xã hội',
+  'từ thiện',
+  'hiến máu',
+  'tài trợ giải chạy',
+  'trao học bổng',
+  'bổ nhiệm',
+  'từ nhiệm',
+  'nghị quyết hđqt',
+  'hội đồng quản trị',
+  'về vietcombank',
+  'cổ phiếu',
+  'msci frontier',
   // Personal promotions clearly not for business
   'cuối tuần lộc',
   'lộc lá',
+  'mb8888',
   'hoàn tiền cá nhân',
   'ưu đãi cuối tuần',
-  // Credit cards (personal)
+  'mở quà trúng lớn',
+  'vòng quay may mắn',
+  // Credit cards / debit cards (personal)
   'mastercard platinum',
-  'visa platinum cá nhân',
+  'visa platinum',
+  'visa classic',
+  'jcb cá nhân',
   'napas cá nhân',
+  'thẻ ghi nợ quốc tế mb',
+  'thẻ tín dụng quốc tế mb',
+  'thẻ tín dụng quốc tế',
 ];
 
 // Clean HTML to pure text – also removes Angular/Vue/React template artifacts
@@ -184,8 +210,8 @@ async function fetchWithRetry(url: string, timeoutMs: number = 10000, retries: n
   return { ok: false, status: 0, text: '' };
 }
 
-// Extract publication date following strict 5-stage priority
-export function extractPublishedDate(html: string): { date: string | null; source: string } {
+// Extract publication date following strict multi-stage priority
+export function extractPublishedDate(html: string, url?: string): { date: string | null; source: string } {
   // 1. JSON-LD datePublished
   const jsonLdMatch = html.match(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
   if (jsonLdMatch) {
@@ -241,7 +267,22 @@ export function extractPublishedDate(html: string): { date: string | null; sourc
     }
   }
 
-  // 4. Text regex for Vietnamese / ISO dates (e.g. 15/08/2024 or 2024-08-15)
+  // 4. URL path date regex (e.g. /the-tin-dung-...-2025-4-23-14-15-19 or /2026-05-08)
+  if (url) {
+    const urlDateMatch = url.match(/\b(202\d)[\/\-_]([0-1]?\d)[\/\-_]([0-3]?\d)\b/);
+    if (urlDateMatch) {
+      const year = urlDateMatch[1];
+      const month = urlDateMatch[2].padStart(2, '0');
+      const day = urlDateMatch[3].padStart(2, '0');
+      const mNum = parseInt(month, 10);
+      const dNum = parseInt(day, 10);
+      if (mNum >= 1 && mNum <= 12 && dNum >= 1 && dNum <= 31) {
+        return { date: `${year}-${month}-${day}`, source: 'URL pathname date YYYY-MM-DD' };
+      }
+    }
+  }
+
+  // 5. Text regex for Vietnamese / ISO dates (e.g. 15/08/2024 or 2024-08-15)
   const dmyMatch = html.match(/\b([0-3]?\d)[\/\-\.]([0-1]?\d)[\/\-\.](202\d)\b/);
   if (dmyMatch) {
     const day = dmyMatch[1].padStart(2, '0');
@@ -264,10 +305,26 @@ export function evaluateAudience(
   content: string,
   url: string
 ): { isCorporate: boolean; audience: string; reason: string } {
-  const combined = `${url} ${title} ${desc} ${content}`.toLowerCase();
+  const normalizedTitle = title.trim();
+  const normalizedText = `${url} ${title} ${desc} ${content}`
+    .toLowerCase()
+    .replace(/[’‘`]/g, "'")
+    .replace(/[“”]/g, '"');
   const urlLower = url.toLowerCase();
 
-  // URL-path-based exclusion for personal banking sections
+  // Exclude generic bank homepages / portal titles
+  const isGenericTitle =
+    /^(mb\s*bank|mbbank|techcombank|vietinbank|bidv|vietcombank|vpbank|acb|sacombank|hdbank|tpbank|seabank|ocb|msb|agribank|lienvietpostbank|shb)(\s*[|–-].*)?$/i.test(normalizedTitle) ||
+    /^(mb\s*ngân hàng quân đội|ngân hàng quân đội)(\s*[|–-].*)?$/i.test(normalizedTitle);
+  if (isGenericTitle) {
+    return {
+      isCorporate: false,
+      audience: 'Trang chủ / Cổng thông tin',
+      reason: 'Tiêu đề là tên trang chủ hoặc cổng thông tin chung của ngân hàng',
+    };
+  }
+
+  // URL-path-based exclusion for personal banking sections and document directories
   const personalUrlPatterns = [
     '/khach-hang-ca-nhan',
     '/ca-nhan',
@@ -278,24 +335,34 @@ export function evaluateAudience(
     '/the-tin-dung-ca-nhan',
     '/vay-ca-nhan',
     '/the-ca-nhan',
-    '/khach-hang-doanh-nghiep-lon',  // CIB-only pages sometimes mis-classified; keep for now
+    '/tin-khuyen-mai-khcn',
+    '/khcn',
+    '-khcn',
+    '/tin-mb/',
+    '/quan-he-co-dong',
+    '/documents',
+    '/bieu-phi',
+    '/bieu-mau',
+    '/tools_slug',
+    '/ve-vietcombank',
   ];
   for (const pat of personalUrlPatterns) {
     if (urlLower.includes(pat)) {
       return {
         isCorporate: false,
-        audience: 'Cá nhân',
-        reason: `URL path chứa dấu hiệu trang khách hàng cá nhân: "${pat}"`,
+        audience: 'Cá nhân / Thông tin chung',
+        reason: `URL path chứa dấu hiệu trang cá nhân / thông tin nội bộ: "${pat}"`,
       };
     }
   }
 
   // Check strong exclusions in text
   for (const exc of EXCLUSION_KEYWORDS) {
-    if (combined.includes(exc)) {
+    const normalizedExc = exc.toLowerCase().replace(/[’‘`]/g, "'").replace(/[“”]/g, '"');
+    if (normalizedText.includes(normalizedExc)) {
       return {
         isCorporate: false,
-        audience: 'Cá nhân / Tuyển dụng',
+        audience: 'Cá nhân / Cổ đông',
         reason: `Chứa từ khóa loại trừ: "${exc}"`,
       };
     }
@@ -304,7 +371,7 @@ export function evaluateAudience(
   // Check positive corporate keywords
   const matchedKeywords: string[] = [];
   for (const kw of CORPORATE_KEYWORDS) {
-    if (combined.includes(kw)) {
+    if (normalizedText.includes(kw)) {
       matchedKeywords.push(kw);
     }
   }
@@ -529,20 +596,19 @@ export async function crawlBankWebsite(params: {
     if (!title && !description) continue;
 
     // Reject pages that seem to be the bank's generic homepage/category hub
-    // (detected by having the bank name as the entire title, or ending with generic bank name)
     const titleLower = title.toLowerCase();
     const isGenericHomepageTitle =
-      /^(mb\s*bank|mbbank|techcombank|vietinbank|bidv|vietcombank|vpbank|acb|sacombank|hdbank|tpbank|seabank|ocb|msb|agribank|lienvietpostbank|shb)(\s|$)/i.test(title) ||
+      /^(mb\s*bank|mbbank|techcombank|vietinbank|bidv|vietcombank|vpbank|acb|sacombank|hdbank|tpbank|seabank|ocb|msb|agribank|lienvietpostbank|shb)(\s|$|[|–-])/i.test(title) ||
       /ng[aâ]n h[àa]ng\s+(qu[aâ]n\s+[dđ][oô]i|ngo[aà]i\s+th[uưừ][oơ]ng|[cô]ng\s+th[uưừ][oơ]ng|[dđ][aầ]u\s+t[uưừ])/.test(titleLower);
-    if (isGenericHomepageTitle && !description) {
+    if (isGenericHomepageTitle) {
       itemsRejectedByAudience++;
       continue;
     }
 
     itemsParsed++;
 
-    // Extract Date
-    const { date, source: dateSource } = extractPublishedDate(html);
+    // Extract Date (pass URL to catch dates embedded in path)
+    const { date, source: dateSource } = extractPublishedDate(html, url);
     const hasDate = Boolean(date);
 
     // Evaluate Audience - use og:description as primary signal, not raw HTML content
@@ -556,7 +622,7 @@ export async function crawlBankWebsite(params: {
     let verificationStatus: 'verified' | 'review' = 'verified';
     let dateReason: string | undefined = undefined;
 
-    // Check date bounds if date is present
+    // Check date bounds strictly
     if (hasDate && date) {
       if (date < dateFrom || date > dateTo) {
         itemsRejectedByDate++;
@@ -564,8 +630,9 @@ export async function crawlBankWebsite(params: {
       }
     } else {
       itemsMissingDate++;
-      verificationStatus = 'review';
-      dateReason = 'DATE_NOT_FOUND';
+      // Reject items with no verifiable date from entering the date range results
+      itemsRejectedByDate++;
+      continue;
     }
 
     const category = detectCategory(`${title} ${description} ${cleanText}`);

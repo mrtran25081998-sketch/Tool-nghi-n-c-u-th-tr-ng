@@ -70,7 +70,7 @@ async function cleanAndPush() {
   const sha = await git.commit({
     fs,
     dir: rootDir,
-    message: 'fix(vercel): add root package-lock.json and vercel.json config for build',
+    message: 'fix(crawler): resolve Vercel build errors, enforce strict date bounds, block personal/investor news, and clean results',
     author: {
       name: 'mrtran25081998-sketch',
       email: 'tranngocgioi.work@gmail.com',
