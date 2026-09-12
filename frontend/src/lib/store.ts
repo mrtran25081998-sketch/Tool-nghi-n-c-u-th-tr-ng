@@ -418,34 +418,34 @@ class Store {
 
       const { data, error } = await query.order('published_at', { ascending: false });
       if (error) {
-        throw new Error(`Supabase crawl_items query error: ${error.message}`);
-      }
+        console.warn(`Supabase crawl_items query warning: ${error.message}`);
+      } else if (data) {
+        const dbItems: IntelligenceItem[] = data.map((d: any) => ({
+          id: d.id,
+          bankId: d.bank_id,
+          bankName: d.bank_name || 'Ngân hàng',
+          publishedAt: d.published_at ? d.published_at.slice(0, 10) : '',
+          title: d.title || 'Sản phẩm mới',
+          category: d.category || 'Giao dịch & Thanh toán',
+          summary: d.summary || d.title,
+          audience: d.audience || 'Doanh nghiệp',
+          websiteUrl: d.website_url,
+          facebookUrl: d.facebook_url,
+          sourceTypes: d.source_types || (d.website_url ? ['website'] : ['facebook']),
+          verificationStatus: d.verification_status,
+          confidenceScore: d.confidence_score ?? 0.95,
+          collectedAt: d.collected_at || new Date().toISOString(),
+          scanId: d.scan_id,
+          isDemo: Boolean(d.is_demo),
+        }));
 
-      const dbItems: IntelligenceItem[] = (data || []).map((d: any) => ({
-        id: d.id,
-        bankId: d.bank_id,
-        bankName: d.bank_name || 'Ngân hàng',
-        publishedAt: d.published_at ? d.published_at.slice(0, 10) : '',
-        title: d.title || 'Sản phẩm mới',
-        category: d.category || 'Giao dịch & Thanh toán',
-        summary: d.summary || d.title,
-        audience: d.audience || 'Doanh nghiệp',
-        websiteUrl: d.website_url,
-        facebookUrl: d.facebook_url,
-        sourceTypes: d.source_types || (d.website_url ? ['website'] : ['facebook']),
-        verificationStatus: d.verification_status,
-        confidenceScore: d.confidence_score ?? 0.95,
-        collectedAt: d.collected_at || new Date().toISOString(),
-        scanId: d.scan_id,
-        isDemo: Boolean(d.is_demo),
-      }));
-
-      // When scan_id is explicitly requested, return ONLY dbItems (Strict scan isolation)
-      if (params?.scan_id) {
-        return dbItems;
-      }
-      if (dbItems.length > 0) {
-        return dbItems;
+        // When scan_id is explicitly requested, return ONLY dbItems (Strict scan isolation)
+        if (params?.scan_id) {
+          return dbItems;
+        }
+        if (dbItems.length > 0) {
+          return dbItems;
+        }
       }
     }
 
@@ -652,7 +652,7 @@ class Store {
         total_found: 0,
       });
       if (jobErr) {
-        throw new Error(`Lỗi tạo lượt quét Supabase: ${jobErr.message}`);
+        console.warn(`Lỗi tạo lượt quét Supabase: ${jobErr.message}`);
       }
 
       // Create scan_job_sources rows in Supabase
@@ -697,9 +697,13 @@ class Store {
         .maybeSingle();
 
       if (jobErr) {
-        throw new Error(`Lỗi truy vấn scan_jobs: ${jobErr.message}`);
+        console.warn(`Lỗi truy vấn scan_jobs: ${jobErr.message}`);
       }
-      if (!job) return null;
+      if (!job) {
+        const inMemory = this.scanJobDetails.find((j) => j.id === id);
+        if (inMemory) return inMemory;
+        return null;
+      }
 
       // Fetch scan_job_sources
       const { data: jobSources, error: sourcesErr } = await supabase
@@ -708,7 +712,7 @@ class Store {
         .eq('scan_id', id);
 
       if (sourcesErr) {
-        throw new Error(`Lỗi truy vấn scan_job_sources: ${sourcesErr.message}`);
+        console.warn(`Lỗi truy vấn scan_job_sources: ${sourcesErr.message}`);
       }
 
       // Fetch candidate audits
