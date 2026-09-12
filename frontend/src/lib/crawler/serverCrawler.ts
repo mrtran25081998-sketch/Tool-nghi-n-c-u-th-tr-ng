@@ -15,6 +15,8 @@ export interface CrawledArticle {
   audience: string;
   isCorporate: boolean;
   audienceReason: string;
+  dateReason?: string;
+  verificationStatus?: 'verified' | 'review';
   confidenceScore: number;
 }
 
@@ -324,6 +326,27 @@ export function discoverArticleLinks(html: string, baseUrl: string, maxLinks: nu
         continue;
       }
 
+      // Exclude category hubs, roots, sitemaps, search, login pages
+      const path = parsed.pathname.toLowerCase().replace(/\/+$/, '');
+      const cleanBase = baseObj.pathname.toLowerCase().replace(/\/+$/, '');
+      if (
+        !path ||
+        path === '' ||
+        path === cleanBase ||
+        path.includes('sitemap') ||
+        path.includes('tim-kiem') ||
+        path.includes('search') ||
+        path.includes('login') ||
+        path.includes('dang-nhap') ||
+        path.includes('auth') ||
+        path.includes('ebank') ||
+        path.endsWith('/khach-hang-doanh-nghiep') ||
+        path.endsWith('/doanh-nghiep') ||
+        path.endsWith('/corporate')
+      ) {
+        continue;
+      }
+
       // Prioritize links containing enterprise keywords or subpaths
       const combined = `${parsed.pathname} ${linkText}`;
       const hasCorporateSignal = CORPORATE_KEYWORDS.some((kw) => combined.includes(kw));
@@ -393,13 +416,13 @@ export async function crawlBankWebsite(params: {
     };
   }
 
-  // Step 2: Discover candidate article links
-  const discoveredLinks = discoverArticleLinks(rootFetch.text, corporateHomepageUrl, maxPages);
-  // Also include the root page itself as a candidate if it has rich corporate info
-  const urlsToProcess = [corporateHomepageUrl, ...discoveredLinks.filter((u) => u !== corporateHomepageUrl)].slice(
-    0,
-    maxPages + 1
-  );
+  // Step 2: Discover candidate detail article links
+  const discoveredLinks = discoverArticleLinks(rootFetch.text, corporateHomepageUrl, maxPages * 2);
+  // CRITICAL: Exclude root category/homepage itself from articles! Only process detail article pages!
+  const normalizedRoot = corporateHomepageUrl.replace(/\/+$/, '').toLowerCase();
+  const urlsToProcess = discoveredLinks
+    .filter((u) => u.replace(/\/+$/, '').toLowerCase() !== normalizedRoot)
+    .slice(0, maxPages);
 
   const articles: CrawledArticle[] = [];
   let pagesFetched = 1; // root is already fetched
@@ -410,16 +433,10 @@ export async function crawlBankWebsite(params: {
 
   for (let i = 0; i < urlsToProcess.length; i++) {
     const url = urlsToProcess[i];
-    let html = '';
-
-    if (url === corporateHomepageUrl) {
-      html = rootFetch.text;
-    } else {
-      const childFetch = await fetchWithRetry(url, 10000, 1);
-      pagesFetched++;
-      if (!childFetch.ok || !childFetch.text) continue;
-      html = childFetch.text;
-    }
+    const childFetch = await fetchWithRetry(url, 10000, 1);
+    pagesFetched++;
+    if (!childFetch.ok || !childFetch.text) continue;
+    const html = childFetch.text;
 
     // Extract basic metadata
     const titleMatch = html.match(/<title\b[^>]*>([^<]+)<\/title>/i);
@@ -448,6 +465,9 @@ export async function crawlBankWebsite(params: {
       continue;
     }
 
+    let verificationStatus: 'verified' | 'review' = 'verified';
+    let dateReason: string | undefined = undefined;
+
     // Check date bounds if date is present
     if (hasDate && date) {
       if (date < dateFrom || date > dateTo) {
@@ -456,6 +476,8 @@ export async function crawlBankWebsite(params: {
       }
     } else {
       itemsMissingDate++;
+      verificationStatus = 'review';
+      dateReason = 'DATE_NOT_FOUND';
     }
 
     const category = detectCategory(`${title} ${description} ${cleanText}`);
@@ -465,13 +487,15 @@ export async function crawlBankWebsite(params: {
       title: title || `${params.bankName} - Dịch vụ khách hàng doanh nghiệp`,
       description: description || cleanText.slice(0, 250),
       content: cleanText.slice(0, 1500),
-      publishedAt: date,
+      publishedAt: hasDate ? date : null,
       hasDate,
       dateSource,
       category,
       audience: audienceEval.audience,
       isCorporate: audienceEval.isCorporate,
       audienceReason: audienceEval.reason,
+      dateReason,
+      verificationStatus,
       confidenceScore: hasDate ? 0.95 : 0.8,
     });
   }
