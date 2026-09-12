@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { store } from '@/lib/store';
 
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
