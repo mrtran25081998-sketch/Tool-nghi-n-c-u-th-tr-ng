@@ -17,12 +17,10 @@ export async function GET(
 
     const items = await store.getIntelligenceItems({
       scan_id: id,
-      date_from: job.dateFrom,
-      date_to: job.dateTo,
       mode: 'live',
     });
 
-    const alerts = await store.getSourceAlerts();
+    const alerts = (await store.getSourceAlerts()).filter((a) => !a.scanId || a.scanId === id);
 
     const responsePayload = {
       success: true,
