@@ -397,34 +397,41 @@ class Store {
     const supabase = this.getClient();
     if (supabase) {
       try {
-        const { data, error } = await supabase.from('intelligence_items').select('*');
+        let query = supabase.from('crawl_items').select('*, banks(name)');
+        if (params?.scan_id) {
+          query = query.eq('job_id', params.scan_id);
+        }
+        const { data, error } = await query;
         if (!error && data && data.length > 0) {
-          const dbItems = data.map((d: any) => ({
-            id: d.id,
-            bankId: d.bank_id,
-            bankName: d.bank_name,
-            publishedAt: d.published_at || '',
-            title: d.title,
-            category: d.category,
-            summary: d.summary,
-            audience: d.audience || 'Doanh nghiệp',
-            audienceReason: d.audience_reason,
-            dateReason: d.date_reason,
-            websiteUrl: d.website_url,
-            facebookUrl: d.facebook_url,
-            sourceTypes: d.source_types || ['website'],
-            verificationStatus: d.verification_status || 'verified',
-            confidenceScore: d.confidence_score ?? 0.95,
-            collectedAt: d.collected_at || new Date().toISOString(),
-            scanId: d.scan_id,
-            isDemo: Boolean(d.is_demo),
-          }));
+          const dbItems: IntelligenceItem[] = data.map((d: any) => {
+            const meta = d.metadata || {};
+            return {
+              id: d.id,
+              bankId: d.bank_id,
+              bankName: d.banks?.name || 'Ngân hàng',
+              publishedAt: d.published_at ? d.published_at.slice(0, 10) : '',
+              title: d.title || 'Sản phẩm mới',
+              category: meta.category || meta.productCategory || 'Giao dịch & Thanh toán',
+              summary: d.summary || d.raw_text || d.title,
+              audience: meta.audience || 'Doanh nghiệp',
+              audienceReason: meta.audienceReason,
+              dateReason: meta.dateReason,
+              websiteUrl: meta.websiteUrl || (d.source_type === 'website' ? d.canonical_url || d.source_url : undefined),
+              facebookUrl: meta.facebookUrl || (d.source_type === 'facebook' ? d.source_url : undefined),
+              sourceTypes: meta.sourceTypes || [d.source_type],
+              verificationStatus: d.status === 'needs_review' ? 'review' : 'verified',
+              confidenceScore: meta.confidenceScore ?? 0.95,
+              collectedAt: d.detected_at || new Date().toISOString(),
+              scanId: d.job_id,
+              isDemo: false,
+            };
+          });
           // Merge unique by ID
           const existingIds = new Set(dbItems.map((i: any) => i.id));
           items = [...dbItems, ...items.filter((i) => !existingIds.has(i.id))];
         }
       } catch (err) {
-        console.warn('Supabase intelligence_items query skipped, using memory store', err);
+        console.warn('Supabase crawl_items query skipped, using memory store', err);
       }
     }
 
@@ -588,13 +595,35 @@ class Store {
 
     this.scanJobDetails.unshift(newJob);
 
+    const supabase = this.getClient();
+    if (supabase) {
+      try {
+        await supabase.from('crawl_jobs').upsert({
+          id,
+          org_id: DEFAULT_ORG_ID,
+          date_from: params.dateFrom,
+          date_to: params.dateTo,
+          status: 'running',
+          progress: 10,
+          error_summary: JSON.stringify({
+            currentStage: newJob.currentStage,
+            currentBankName: '',
+            selectedBanks: params.selectedBanks,
+            sourceTypes: params.sourceTypes,
+          }),
+        });
+      } catch (e) {
+        console.warn('Supabase crawl_jobs initial upsert warning:', e);
+      }
+    }
+
     // Run async scan pipeline in background without blocking response
-    this.runScanPipelineAsync(newJob);
+    this.runScanPipeline(newJob);
 
     return newJob;
   }
 
-  private async runScanPipelineAsync(job: ScanJobDetail) {
+  async runScanPipeline(job: ScanJobDetail) {
     const allBanks = await this.getBanks();
     const allSources = await this.getSourcePairs();
 
@@ -625,11 +654,13 @@ class Store {
     job.metrics = metrics;
     job.sourceResults = sourceResults;
 
-    for (let idx = 0; idx < total; idx++) {
+    const supabase = this.getClient();
+
+    // Run banks concurrently for fast execution within serverless limits
+    const bankTasks = targetList.map(async (bank, idx) => {
       const current = this.scanJobDetails.find((j) => j.id === job.id);
       if (!current || current.status === 'cancelled') return;
 
-      const bank = targetList[idx];
       const sourcePair = allSources.find((sp) => sp.bank_id === bank.id);
 
       const websiteUrl = sourcePair?.website_url || (bank as any).website_url || '';
@@ -752,14 +783,14 @@ class Store {
           publishedAt: art.publishedAt || '',
           title: art.title,
           category: art.category,
-          summary: art.description || art.content.slice(0, 250),
-          audience: art.audience,
+          summary: art.summary || art.description || art.content.slice(0, 250),
+          audience: art.targetAudience || art.audience,
           audienceReason: art.audienceReason,
-          dateReason: art.hasDate ? undefined : 'DATE_NOT_FOUND',
+          dateReason: art.dateReason || (art.hasDate ? undefined : 'DATE_NOT_FOUND'),
           websiteUrl: art.url,
           sourceTypes: ['website'],
-          verificationStatus: art.hasDate ? 'verified' : 'review',
-          confidenceScore: art.confidenceScore,
+          verificationStatus: art.verificationStatus || (art.hasDate ? 'verified' : 'review'),
+          confidenceScore: art.confidenceScore || 0.95,
           collectedAt: new Date().toISOString(),
           scanId: job.id,
           isDemo: false, // Authentic Live item!
@@ -780,22 +811,38 @@ class Store {
         mergedForBank.push(item);
       }
 
-      for (const fb of bankFacebookArticles) {
+      for (const post of bankFacebookArticles) {
+        const normPostTitle = (post.title || '').toLowerCase().trim();
+        const existing = mergedForBank.find(
+          (m) =>
+            m.title.toLowerCase().trim() === normPostTitle ||
+            (normPostTitle.length > 15 && m.title.toLowerCase().includes(normPostTitle.slice(0, 20)))
+        );
+
+        if (existing) {
+          existing.facebookUrl = post.url;
+          if (!existing.sourceTypes.includes('facebook')) {
+            existing.sourceTypes.push('facebook');
+          }
+          metrics.itemsDeduplicated++;
+          continue;
+        }
+
         mergedForBank.push({
-          id: 'item-' + Buffer.from(fb.url).toString('base64url').slice(0, 24),
+          id: 'item-' + Buffer.from(post.url).toString('base64url').slice(0, 24),
           bankId: bank.id,
           bankName: bank.name,
-          publishedAt: fb.publishedAt || '',
-          title: fb.title,
-          category: fb.category,
-          summary: fb.description || fb.content.slice(0, 250),
-          audience: fb.audience,
-          audienceReason: fb.audienceReason,
-          dateReason: fb.hasDate ? undefined : 'DATE_NOT_FOUND',
-          facebookUrl: fb.url,
+          publishedAt: post.publishedAt || '',
+          title: post.title,
+          category: post.category,
+          summary: post.summary || post.description || post.content.slice(0, 250),
+          audience: post.targetAudience || post.audience,
+          audienceReason: post.audienceReason,
+          dateReason: post.dateReason || (post.hasDate ? undefined : 'DATE_NOT_FOUND'),
+          facebookUrl: post.url,
           sourceTypes: ['facebook'],
-          verificationStatus: fb.hasDate ? 'verified' : 'review',
-          confidenceScore: fb.confidenceScore,
+          verificationStatus: post.verificationStatus || (post.hasDate ? 'verified' : 'review'),
+          confidenceScore: post.confidenceScore || 0.85,
           collectedAt: new Date().toISOString(),
           scanId: job.id,
           isDemo: false,
@@ -808,7 +855,45 @@ class Store {
         metrics.itemsSaved++;
         metrics.itemsAccepted++;
       }
-    }
+
+      // Persist items to Supabase crawl_items
+      if (supabase && mergedForBank.length > 0) {
+        try {
+          await supabase.from('crawl_items').upsert(
+            mergedForBank.map((item) => ({
+              id: crypto.randomUUID(),
+              org_id: DEFAULT_ORG_ID,
+              job_id: job.id,
+              bank_id: item.bankId,
+              source_type: item.sourceTypes.includes('facebook') && !item.sourceTypes.includes('website') ? 'facebook' : 'website',
+              source_url: item.websiteUrl || item.facebookUrl || '',
+              canonical_url: item.websiteUrl || item.facebookUrl || '',
+              published_at: item.publishedAt ? new Date(item.publishedAt).toISOString() : null,
+              detected_at: new Date().toISOString(),
+              title: item.title,
+              summary: item.summary,
+              raw_text: item.summary,
+              content_hash: item.id,
+              status: item.verificationStatus === 'review' ? 'needs_review' : 'accepted',
+              metadata: {
+                category: item.category,
+                audience: item.audience,
+                audienceReason: item.audienceReason,
+                dateReason: item.dateReason,
+                confidenceScore: item.confidenceScore,
+                websiteUrl: item.websiteUrl,
+                facebookUrl: item.facebookUrl,
+                sourceTypes: item.sourceTypes,
+              },
+            }))
+          );
+        } catch (e) {
+          console.warn('Supabase crawl_items upsert error:', e);
+        }
+      }
+    });
+
+    await Promise.allSettled(bankTasks);
 
     const current = this.scanJobDetails.find((j) => j.id === job.id);
     if (current && current.status !== 'cancelled') {
@@ -836,11 +921,70 @@ class Store {
       current.totalFound = metrics.itemsSaved;
       current.metrics = metrics;
       current.sourceResults = sourceResults;
+
+      // Update Supabase crawl_jobs
+      if (supabase) {
+        try {
+          await supabase.from('crawl_jobs').update({
+            status: finalStatus,
+            progress: 100,
+            error_summary: JSON.stringify({
+              currentStage: current.currentStage,
+              currentBankName: current.currentBankName,
+              selectedBanks: current.selectedBanks,
+              sourceTypes: current.sourceTypes,
+              metrics: current.metrics,
+              sourceResults: current.sourceResults,
+              finishedAt: current.finishedAt,
+            }),
+            finished_at: new Date().toISOString(),
+          }).eq('id', job.id);
+        } catch (e) {
+          console.warn('Supabase crawl_jobs final update error:', e);
+        }
+      }
     }
   }
 
   async getScanJobDetail(id: string): Promise<ScanJobDetail | null> {
-    return this.scanJobDetails.find((j) => j.id === id) || null;
+    const inMemory = this.scanJobDetails.find((j) => j.id === id);
+    if (inMemory) return inMemory;
+
+    const supabase = this.getClient();
+    if (supabase) {
+      try {
+        const { data } = await supabase.from('crawl_jobs').select('*').eq('id', id).maybeSingle();
+        if (data) {
+          let meta: any = {};
+          try {
+            meta = JSON.parse(data.error_summary || '{}');
+          } catch {}
+
+          const reconstructed: ScanJobDetail = {
+            id: data.id,
+            dateFrom: data.date_from,
+            dateTo: data.date_to,
+            selectedBanks: meta.selectedBanks || [],
+            sourceTypes: meta.sourceTypes || ['website'],
+            status: data.status as any,
+            progressPercent: data.progress || 0,
+            currentStage: meta.currentStage || '',
+            currentBankName: meta.currentBankName || '',
+            totalFound: meta.metrics?.itemsSaved || 0,
+            createdAt: data.created_at,
+            finishedAt: data.finished_at,
+            metrics: meta.metrics,
+            sourceResults: meta.sourceResults || [],
+          };
+          this.scanJobDetails.push(reconstructed);
+          return reconstructed;
+        }
+      } catch (err) {
+        console.warn('Supabase getScanJobDetail error:', err);
+      }
+    }
+
+    return null;
   }
 
   async cancelScanJobDetail(id: string): Promise<ScanJobDetail | null> {
