@@ -333,6 +333,16 @@ export function discoverArticleLinks(html: string, baseUrl: string, maxLinks: nu
         !path ||
         path === '' ||
         path === cleanBase ||
+        path === '/home' ||
+        path.endsWith('/home') ||
+        path === '/support' ||
+        path.endsWith('/support') ||
+        path === '/about' ||
+        path.endsWith('/about') ||
+        path === '/contact' ||
+        path.endsWith('/contact') ||
+        path.endsWith('/lien-he') ||
+        path.endsWith('/gioi-thieu') ||
         path.includes('sitemap') ||
         path.includes('tim-kiem') ||
         path.includes('search') ||
