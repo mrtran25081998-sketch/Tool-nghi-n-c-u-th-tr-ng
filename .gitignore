@@ -38,3 +38,6 @@ Thumbs.db
 .idea/
 *.swp
 *.swo
+
+# Utility scripts (may contain secrets/tokens)
+frontend/scripts/

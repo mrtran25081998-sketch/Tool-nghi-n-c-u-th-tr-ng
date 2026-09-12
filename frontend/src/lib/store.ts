@@ -403,29 +403,51 @@ class Store {
         }
         const { data, error } = await query;
         if (!error && data && data.length > 0) {
-          const dbItems: IntelligenceItem[] = data.map((d: any) => {
-            const meta = d.metadata || {};
-            return {
-              id: d.id,
-              bankId: d.bank_id,
-              bankName: d.banks?.name || 'Ngân hàng',
-              publishedAt: d.published_at ? d.published_at.slice(0, 10) : '',
-              title: d.title || 'Sản phẩm mới',
-              category: meta.category || meta.productCategory || 'Giao dịch & Thanh toán',
-              summary: d.summary || d.raw_text || d.title,
-              audience: meta.audience || 'Doanh nghiệp',
-              audienceReason: meta.audienceReason,
-              dateReason: meta.dateReason,
-              websiteUrl: meta.websiteUrl || (d.source_type === 'website' ? d.canonical_url || d.source_url : undefined),
-              facebookUrl: meta.facebookUrl || (d.source_type === 'facebook' ? d.source_url : undefined),
-              sourceTypes: meta.sourceTypes || [d.source_type],
-              verificationStatus: d.status === 'needs_review' ? 'review' : 'verified',
-              confidenceScore: meta.confidenceScore ?? 0.95,
-              collectedAt: d.detected_at || new Date().toISOString(),
-              scanId: d.job_id,
-              isDemo: false,
-            };
-          });
+          // Helper: strip Angular/template artifacts from summary text
+          const cleanSummary = (text: string): string => {
+            if (!text) return '';
+            return text
+              .replace(/ng-[a-z-]+=\s*"[^"]*"/gi, ' ')
+              .replace(/ng-[a-z-]+=\s*'[^']*'/gi, ' ')
+              .replace(/\{\{[^}]*\}\}/g, ' ')
+              .replace(/\$index|\$scope|\$emit|emit-last-repeater/g, ' ')
+              .replace(/track by \S+/g, ' ')
+              .replace(/'[a-z-]+':!?\([^)]+\)/g, ' ')
+              .replace(/,\s*'[a-z-]+':!?\([^)]+\)/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim()
+              .slice(0, 500); // cap at 500 chars
+          };
+
+          const dbItems: IntelligenceItem[] = data
+            // Exclude test/demo rows inserted during debugging
+            .filter((d: any) => {
+              const t = (d.title || '').toLowerCase();
+              return !t.startsWith('test ') && t !== 'test' && !t.includes('test article');
+            })
+            .map((d: any) => {
+              const meta = d.metadata || {};
+              return {
+                id: d.id,
+                bankId: d.bank_id,
+                bankName: d.banks?.name || 'Ngân hàng',
+                publishedAt: d.published_at ? d.published_at.slice(0, 10) : '',
+                title: d.title || 'Sản phẩm mới',
+                category: meta.category || meta.productCategory || 'Giao dịch & Thanh toán',
+                summary: cleanSummary(d.summary || d.raw_text || d.title),
+                audience: meta.audience || 'Doanh nghiệp',
+                audienceReason: meta.audienceReason,
+                dateReason: meta.dateReason,
+                websiteUrl: meta.websiteUrl || (d.source_type === 'website' ? d.canonical_url || d.source_url : undefined),
+                facebookUrl: meta.facebookUrl || (d.source_type === 'facebook' ? d.source_url : undefined),
+                sourceTypes: meta.sourceTypes || [d.source_type],
+                verificationStatus: d.status === 'needs_review' ? 'review' : 'verified',
+                confidenceScore: meta.confidenceScore ?? 0.95,
+                collectedAt: d.detected_at || new Date().toISOString(),
+                scanId: d.job_id,
+                isDemo: false,
+              };
+            });
           // Merge unique by ID
           const existingIds = new Set(dbItems.map((i: any) => i.id));
           items = [...dbItems, ...items.filter((i) => !existingIds.has(i.id))];

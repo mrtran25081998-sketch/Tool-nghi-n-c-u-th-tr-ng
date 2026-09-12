@@ -26,7 +26,7 @@ export default function AppLayoutShell({ children }: { children: React.ReactNode
   }
 
   // Loading state while verifying auth session
-  if (isLoading || (!isAuthenticated && !isLoginPage)) {
+  if (isLoading) {
     return (
       <div className="min-h-screen w-full flex flex-col items-center justify-center bg-[#07153a] text-white">
         <div className="mb-4">
@@ -40,7 +40,7 @@ export default function AppLayoutShell({ children }: { children: React.ReactNode
           />
         </div>
         <div className="w-8 h-8 border-3 border-white/20 border-t-[#1646d8] rounded-full animate-spin mb-3" />
-        <div className="text-xs text-[#a5b7db] font-medium">Đang xác thực phiên làm việc...</div>
+        <div className="text-xs text-[#a5b7db] font-medium">Đang tải dữ liệu hệ thống...</div>
       </div>
     );
   }

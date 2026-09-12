@@ -2,7 +2,8 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/providers/AuthProvider';
-import { Bell, Info, LogOut, User as UserIcon, Shield, ChevronDown } from 'lucide-react';
+import Link from 'next/link';
+import { Bell, Info, LogOut, User as UserIcon, Shield, ChevronDown, Users } from 'lucide-react';
 
 export default function Topbar() {
   const { user, logout } = useAuth();
@@ -77,6 +78,19 @@ export default function Topbar() {
                 <div className="px-4 py-2 text-[11px] text-[#98a2b3] font-semibold uppercase tracking-wider">
                   Tài khoản
                 </div>
+
+                {/* Only visible for Admin accounts */}
+                {(user?.role === 'admin' || user?.username === 'admin') && (
+                  <Link
+                    href="/users"
+                    onClick={() => setDropdownOpen(false)}
+                    className="w-full px-4 py-2 text-left text-xs text-[#344054] hover:bg-[#f7f9fc] hover:text-[#1646d8] flex items-center gap-2.5 transition-colors font-medium no-underline"
+                  >
+                    <Users className="w-4 h-4 text-[#1646d8]" />
+                    <span>Quản lý tài khoản</span>
+                  </Link>
+                )}
+
                 <button
                   type="button"
                   onClick={() => {

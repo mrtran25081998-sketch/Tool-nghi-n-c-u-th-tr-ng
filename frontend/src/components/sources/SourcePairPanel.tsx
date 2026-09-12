@@ -2,31 +2,62 @@
 
 import React, { useState } from 'react';
 import { SourcePair } from '@/types';
-import { Plus, Check, Trash2, Calendar, Database, CheckCircle2, HelpCircle } from 'lucide-react';
+import { Plus, Check, Trash2, Calendar, Database, Globe, CheckCircle2, HelpCircle, ListFilter } from 'lucide-react';
 import AddSourceModal from './AddSourceModal';
 
 interface SourcePairPanelProps {
   sources: SourcePair[];
+  discoveredCount?: number;
   onAddPair: (data: { bank_name?: string; facebook_url: string; website_url: string }) => void;
   onUpdateUrl: (id: string, type: 'facebook' | 'website', url: string) => void;
   onVerify: (id: string, type: 'facebook' | 'website') => void;
   onDeletePair: (id: string) => void;
   onTriggerCrawl: (dateFrom: string, dateTo: string) => void;
+  onOpenDiscoveryDrawer: () => void;
   isCrawling?: boolean;
+  dateFrom?: string;
+  dateTo?: string;
+  onDateFromChange?: (date: string) => void;
+  onDateToChange?: (date: string) => void;
 }
 
 export default function SourcePairPanel({
   sources,
+  discoveredCount = 20,
   onAddPair,
   onUpdateUrl,
   onVerify,
   onDeletePair,
   onTriggerCrawl,
+  onOpenDiscoveryDrawer,
   isCrawling = false,
+  dateFrom: controlledDateFrom,
+  dateTo: controlledDateTo,
+  onDateFromChange,
+  onDateToChange,
 }: SourcePairPanelProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [dateFrom, setDateFrom] = useState('2024-01-01');
-  const [dateTo, setDateTo] = useState('2024-12-31');
+  const [internalDateFrom, setInternalDateFrom] = useState(() => {
+    const d = new Date();
+    d.setMonth(d.getMonth() - 1);
+    return d.toISOString().split('T')[0];
+  });
+  const [internalDateTo, setInternalDateTo] = useState(() => {
+    return new Date().toISOString().split('T')[0];
+  });
+
+  const dateFrom = controlledDateFrom !== undefined ? controlledDateFrom : internalDateFrom;
+  const dateTo = controlledDateTo !== undefined ? controlledDateTo : internalDateTo;
+
+  const handleDateFromChange = (newDate: string) => {
+    if (onDateFromChange) onDateFromChange(newDate);
+    setInternalDateFrom(newDate);
+  };
+
+  const handleDateToChange = (newDate: string) => {
+    if (onDateToChange) onDateToChange(newDate);
+    setInternalDateTo(newDate);
+  };
 
   return (
     <div className="bg-white border border-[#d9e2f2] rounded-xl p-4 shadow-card mb-4">
@@ -34,18 +65,21 @@ export default function SourcePairPanel({
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_1px_1fr] gap-4">
         {/* Facebook Column */}
         <div>
-          <h3 className="text-[14px] font-bold text-[#0f2357] flex items-center gap-2 mb-1">
-            <span>🔵 Nguồn Facebook</span>
-          </h3>
-          <p className="text-[11px] text-[#667085] mb-3">Nhập URL fanpage chính thức của các ngân hàng</p>
+          <div className="flex items-center justify-between mb-1">
+            <h3 className="text-[14px] font-bold text-[#0f2357] flex items-center gap-2 m-0">
+              <span>🔵 Nguồn Facebook</span>
+            </h3>
+            <span className="text-[11px] font-semibold text-[#667085]">Tần suất quét: 24h</span>
+          </div>
+          <p className="text-[11px] text-[#667085] mb-3">Nhập URL fanpage chính thức của các ngân hàng đối thủ</p>
 
           <div className="space-y-2">
             {sources.map((pair) => (
               <div
                 key={`fb-${pair.id}`}
-                className="grid grid-cols-[110px_20px_minmax(0,1fr)_32px] gap-1.5 items-center min-h-[32px]"
+                className="grid grid-cols-[120px_20px_minmax(0,1fr)_32px] gap-1.5 items-center min-h-[32px]"
               >
-                <div className="text-xs font-semibold text-[#0f2357] truncate" title={pair.bank_name || 'Chưa xác định'}>
+                <div className="text-xs font-bold text-[#0f2357] truncate" title={pair.bank_name || 'Chưa xác định'}>
                   {pair.bank_name || 'Chưa xác định'}
                 </div>
 
@@ -54,7 +88,7 @@ export default function SourcePairPanel({
                     className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold text-white ${
                       pair.facebook_verified ? 'bg-[#18a566]' : 'bg-[#d0d5dd]'
                     }`}
-                    title={pair.facebook_verified ? 'Đã xác thực' : 'Chưa xác thực'}
+                    title={pair.facebook_verified ? 'Đã xác thực chính thức' : 'Chưa xác thực'}
                   >
                     {pair.facebook_verified ? '✓' : '?'}
                   </span>
@@ -95,18 +129,28 @@ export default function SourcePairPanel({
 
         {/* Website Column */}
         <div>
-          <h3 className="text-[14px] font-bold text-[#0f2357] flex items-center gap-2 mb-1">
-            <span>🌐 Nguồn Website</span>
-          </h3>
-          <p className="text-[11px] text-[#667085] mb-3">Nhập URL website chính thức của các ngân hàng</p>
+          <div className="flex items-center justify-between mb-1">
+            <h3 className="text-[14px] font-bold text-[#0f2357] flex items-center gap-2 m-0">
+              <span>🌐 Nguồn Website Seed</span>
+            </h3>
+            <button
+              type="button"
+              onClick={onOpenDiscoveryDrawer}
+              className="text-[11px] font-bold text-[#1646d8] hover:underline flex items-center gap-1 bg-[#eef5ff] px-2 py-0.5 rounded-md"
+            >
+              <Globe className="w-3 h-3" />
+              <span>{discoveredCount} nguồn website đang theo dõi</span>
+            </button>
+          </div>
+          <p className="text-[11px] text-[#667085] mb-3">Nhập Website Seed URL — Hệ thống tự khám phá thêm URL con liên quan</p>
 
           <div className="space-y-2">
             {sources.map((pair) => (
               <div
                 key={`web-${pair.id}`}
-                className="grid grid-cols-[110px_20px_minmax(0,1fr)_32px_28px] gap-1.5 items-center min-h-[32px]"
+                className="grid grid-cols-[120px_20px_minmax(0,1fr)_32px_28px] gap-1.5 items-center min-h-[32px]"
               >
-                <div className="text-xs font-semibold text-[#0f2357] truncate" title={pair.bank_name || 'Chưa xác định'}>
+                <div className="text-xs font-bold text-[#0f2357] truncate" title={pair.bank_name || 'Chưa xác định'}>
                   {pair.bank_name || 'Chưa xác định'}
                 </div>
 
@@ -115,7 +159,7 @@ export default function SourcePairPanel({
                     className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold text-white ${
                       pair.website_verified ? 'bg-[#18a566]' : 'bg-[#d0d5dd]'
                     }`}
-                    title={pair.website_verified ? 'Đã xác thực' : 'Chưa xác thực'}
+                    title={pair.website_verified ? 'Đã xác thực chính thức' : 'Chưa xác thực'}
                   >
                     {pair.website_verified ? '✓' : '?'}
                   </span>
@@ -149,6 +193,17 @@ export default function SourcePairPanel({
               </div>
             ))}
           </div>
+
+          <div className="flex items-center justify-between mt-3">
+            <button
+              type="button"
+              onClick={onOpenDiscoveryDrawer}
+              className="text-xs font-bold text-[#1646d8] hover:text-[#0c53e8] flex items-center gap-1.5"
+            >
+              <ListFilter className="w-3.5 h-3.5" />
+              <span>Xem chi tiết danh sách URL con được khám phá &rarr;</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -167,7 +222,7 @@ export default function SourcePairPanel({
           <input
             type="date"
             value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
+            onChange={(e) => handleDateFromChange(e.target.value)}
             className="w-full h-9 border border-[#cdd8ea] rounded-lg px-3 text-xs text-[#344054] focus:outline-none focus:border-[#1646d8]"
           />
         </div>
@@ -177,7 +232,7 @@ export default function SourcePairPanel({
           <input
             type="date"
             value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
+            onChange={(e) => handleDateToChange(e.target.value)}
             className="w-full h-9 border border-[#cdd8ea] rounded-lg px-3 text-xs text-[#344054] focus:outline-none focus:border-[#1646d8]"
           />
         </div>
@@ -186,7 +241,7 @@ export default function SourcePairPanel({
           type="button"
           disabled={isCrawling}
           onClick={() => onTriggerCrawl(dateFrom, dateTo)}
-          className="w-full h-9 bg-gradient-to-r from-[#2465ed] to-[#0c53e8] text-white rounded-lg text-xs font-bold hover:opacity-95 shadow-sm transition-opacity flex items-center justify-center gap-2 disabled:opacity-50"
+          className="w-full h-9 bg-gradient-to-r from-[#2465ed] to-[#0c53e8] text-white rounded-lg text-xs font-bold hover:opacity-95 shadow-sm transition-opacity flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer"
         >
           <Database className="w-4 h-4" />
           <span>{isCrawling ? 'Đang cào dữ liệu...' : '🗄 Cào dữ liệu'}</span>

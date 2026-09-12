@@ -64,19 +64,38 @@ const CORPORATE_KEYWORDS = [
 ];
 
 const EXCLUSION_KEYWORDS = [
+  // Explicit individual/personal product keywords
   'vay mua nhà cá nhân',
   'thẻ tín dụng cá nhân',
   'tài khoản thanh toán cá nhân',
   'tiết kiệm cá nhân',
   'vay tiêu dùng cá nhân',
+  'khách hàng cá nhân',
+  'personal banking',
+  'retail banking',
+  // Non-business news / investor relations
   'tuyển dụng',
   'quan hệ cổ đông',
   'báo cáo thường niên',
   'công bố thông tin',
   'đại hội đồng cổ đông',
+  'xếp hạng tín nhiệm',
+  "moody's",
+  'fitch ratings',
+  's&p global',
+  'standard & poor',
+  // Personal promotions clearly not for business
+  'cuối tuần lộc',
+  'lộc lá',
+  'hoàn tiền cá nhân',
+  'ưu đãi cuối tuần',
+  // Credit cards (personal)
+  'mastercard platinum',
+  'visa platinum cá nhân',
+  'napas cá nhân',
 ];
 
-// Clean HTML to pure text
+// Clean HTML to pure text – also removes Angular/Vue/React template artifacts
 function stripHtml(html: string): string {
   if (!html) return '';
   return html
@@ -92,6 +111,15 @@ function stripHtml(html: string): string {
     .replace(/&#39;/g, "'")
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
+    // Remove Angular/AngularJS template expressions and directives (ng-repeat, ng-if, etc.)
+    .replace(/ng-[a-z-]+=\s*"[^"]*"/gi, ' ')
+    .replace(/ng-[a-z-]+=\s*'[^']*'/gi, ' ')
+    .replace(/\{\{[^}]*\}\}/g, ' ')  // Remove {{ expression }} interpolations
+    .replace(/\$index|\$scope|\$emit|emit-last-repeater/g, ' ')
+    .replace(/track by \S+/g, ' ')
+    .replace(/'[a-z]+':![^,)]+/g, ' ')  // Remove AngularJS object expressions like 'menu':!(link.x)
+    // Remove any remaining template-like leftover patterns
+    .replace(/,\s*'[a-z-]+':!?\([^)]+\)/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -237,8 +265,32 @@ export function evaluateAudience(
   url: string
 ): { isCorporate: boolean; audience: string; reason: string } {
   const combined = `${url} ${title} ${desc} ${content}`.toLowerCase();
+  const urlLower = url.toLowerCase();
 
-  // Check strong exclusions
+  // URL-path-based exclusion for personal banking sections
+  const personalUrlPatterns = [
+    '/khach-hang-ca-nhan',
+    '/ca-nhan',
+    '/personal',
+    '/individual',
+    '/retail',
+    '/tiet-kiem-ca-nhan',
+    '/the-tin-dung-ca-nhan',
+    '/vay-ca-nhan',
+    '/the-ca-nhan',
+    '/khach-hang-doanh-nghiep-lon',  // CIB-only pages sometimes mis-classified; keep for now
+  ];
+  for (const pat of personalUrlPatterns) {
+    if (urlLower.includes(pat)) {
+      return {
+        isCorporate: false,
+        audience: 'Cá nhân',
+        reason: `URL path chứa dấu hiệu trang khách hàng cá nhân: "${pat}"`,
+      };
+    }
+  }
+
+  // Check strong exclusions in text
   for (const exc of EXCLUSION_KEYWORDS) {
     if (combined.includes(exc)) {
       return {
@@ -326,7 +378,7 @@ export function discoverArticleLinks(html: string, baseUrl: string, maxLinks: nu
         continue;
       }
 
-      // Exclude category hubs, roots, sitemaps, search, login pages
+      // Exclude category hubs, roots, sitemaps, search, login pages, personal banking sections
       const path = parsed.pathname.toLowerCase().replace(/\/+$/, '');
       const cleanBase = baseObj.pathname.toLowerCase().replace(/\/+$/, '');
       if (
@@ -352,16 +404,27 @@ export function discoverArticleLinks(html: string, baseUrl: string, maxLinks: nu
         path.includes('ebank') ||
         path.endsWith('/khach-hang-doanh-nghiep') ||
         path.endsWith('/doanh-nghiep') ||
-        path.endsWith('/corporate')
+        path.endsWith('/corporate') ||
+        // Explicitly exclude personal banking paths
+        path.includes('/khach-hang-ca-nhan') ||
+        path.includes('/ca-nhan/') ||
+        path.includes('/the-ca-nhan') ||
+        path.includes('/vay-ca-nhan') ||
+        path.includes('/tiet-kiem-ca-nhan') ||
+        path.includes('/personal') ||
+        path.includes('/individual')
       ) {
         continue;
       }
 
-      // Prioritize links containing enterprise keywords or subpaths
+      // Only include links with clear corporate/enterprise signals
       const combined = `${parsed.pathname} ${linkText}`;
-      const hasCorporateSignal = CORPORATE_KEYWORDS.some((kw) => combined.includes(kw));
+      const hasCorporateSignal =
+        CORPORATE_KEYWORDS.some((kw) => combined.includes(kw)) ||
+        // Also allow detail article paths that may have corporate content
+        /\/(chi-tiet|tin-tuc|san-pham|giai-phap|dich-vu|uu-dai|khuyen-mai|khcn-dn|corporate|business|sme|smb|enterprise)\//i.test(path);
 
-      if (hasCorporateSignal || links.length < 5) {
+      if (hasCorporateSignal) {
         seen.add(normalized);
         links.push(normalized);
         if (links.length >= maxLinks) break;
@@ -451,7 +514,10 @@ export async function crawlBankWebsite(params: {
     // Extract basic metadata
     const titleMatch = html.match(/<title\b[^>]*>([^<]+)<\/title>/i);
     const ogTitleMatch = html.match(/<meta\b[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i);
-    const title = (ogTitleMatch?.[1] || titleMatch?.[1] || '').trim();
+    const rawTitle = (ogTitleMatch?.[1] || titleMatch?.[1] || '').trim();
+
+    // Clean the title: remove site name suffix (e.g. " | MB Bank")
+    const title = rawTitle.replace(/\s*[|–-]\s*(MB\s*Bank|MBBank|Techcombank|Vietinbank|BIDV|Vietcombank|VPBank|ACB|Sacombank|HDBank|TPBank|SeABank|OCB|MSB|Agribank|LienVietPostBank|SHB)[^|]*/gi, '').trim() || rawTitle;
 
     const descMatch =
       html.match(/<meta\b[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i) ||
@@ -461,13 +527,25 @@ export async function crawlBankWebsite(params: {
     const cleanText = stripHtml(html).slice(0, 4000);
 
     if (!title && !description) continue;
+
+    // Reject pages that seem to be the bank's generic homepage/category hub
+    // (detected by having the bank name as the entire title, or ending with generic bank name)
+    const titleLower = title.toLowerCase();
+    const isGenericHomepageTitle =
+      /^(mb\s*bank|mbbank|techcombank|vietinbank|bidv|vietcombank|vpbank|acb|sacombank|hdbank|tpbank|seabank|ocb|msb|agribank|lienvietpostbank|shb)(\s|$)/i.test(title) ||
+      /ng[aâ]n h[àa]ng\s+(qu[aâ]n\s+[dđ][oô]i|ngo[aà]i\s+th[uưừ][oơ]ng|[cô]ng\s+th[uưừ][oơ]ng|[dđ][aầ]u\s+t[uưừ])/.test(titleLower);
+    if (isGenericHomepageTitle && !description) {
+      itemsRejectedByAudience++;
+      continue;
+    }
+
     itemsParsed++;
 
     // Extract Date
     const { date, source: dateSource } = extractPublishedDate(html);
     const hasDate = Boolean(date);
 
-    // Evaluate Audience
+    // Evaluate Audience - use og:description as primary signal, not raw HTML content
     const audienceEval = evaluateAudience(title, description, cleanText, url);
 
     if (!audienceEval.isCorporate) {
