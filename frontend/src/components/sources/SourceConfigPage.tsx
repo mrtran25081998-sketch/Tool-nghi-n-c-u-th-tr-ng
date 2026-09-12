@@ -180,7 +180,7 @@ export default function SourceConfigPage({ initialSources }: SourceConfigPagePro
     const hasFb = (r?.facebookUrl || s.facebook_url).trim().length > 0;
     return n + (hasWeb ? 1 : 0) + (hasFb ? 1 : 0);
   }, 0);
-  const healthyCount = sources.filter((s) => rows[s.id]?.active !== false).length;
+  const healthyCount = sources.filter((s) => s.website_verified && rows[s.id]?.active !== false).length;
 
   // Filtered and paginated sources
   const filteredSources = useMemo(() => {
@@ -433,8 +433,8 @@ export default function SourceConfigPage({ initialSources }: SourceConfigPagePro
           <StatCard
             icon={<ShieldCheck className="w-5 h-5 text-[#f59e0b]" />}
             value={healthyCount}
-            label="Nguồn hoạt động tốt"
-            sub={`${totalSources - healthyCount} cần kiểm tra`}
+            label="Nguồn Website sẵn sàng"
+            sub={`Facebook: Tạm ngưng (thiếu Token)`}
             accent="#fff7df"
           />
         </div>
@@ -538,15 +538,22 @@ export default function SourceConfigPage({ initialSources }: SourceConfigPagePro
 
                       {/* Facebook URL */}
                       <td className="px-4 py-3.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[#1646d8] text-[13px] shrink-0">𝗳</span>
-                          <UrlCell
-                            value={row.facebookUrl}
-                            onChange={(v) => setField(s.id, 'facebookUrl', v)}
-                            onRefresh={() => handleRefresh(s.id, 'facebook')}
-                            placeholder="https://facebook.com/..."
-                            refreshing={refreshingId === `${s.id}-facebook`}
-                          />
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[#1646d8] text-[13px] shrink-0">𝗳</span>
+                            <UrlCell
+                              value={row.facebookUrl}
+                              onChange={(v) => setField(s.id, 'facebookUrl', v)}
+                              onRefresh={() => handleRefresh(s.id, 'facebook')}
+                              placeholder="https://facebook.com/..."
+                              refreshing={refreshingId === `${s.id}-facebook`}
+                            />
+                          </div>
+                          {!s.facebook_verified && (
+                            <span className="text-[10px] text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 w-fit">
+                              Thiếu Meta Graph Token (Tạm ngưng)
+                            </span>
+                          )}
                         </div>
                       </td>
 
