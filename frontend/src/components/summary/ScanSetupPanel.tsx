@@ -379,6 +379,9 @@ export default function ScanSetupPanel({
                 />
                 <Radio className="w-3.5 h-3.5 text-indigo-600" />
                 Facebook
+                <span className="text-[10px] text-[#b54708] bg-[#fffaeb] px-1.5 py-0.5 rounded border border-[#fedf89] font-normal">
+                  Cần Meta Token
+                </span>
               </label>
               <button
                 type="button"
@@ -464,7 +467,7 @@ export default function ScanSetupPanel({
                 Để quét bài đăng từ Fanpage Facebook ngân hàng chính thức tuân thủ chính sách bảo mật, hệ thống kết nối trực tiếp qua <strong>Meta Graph API</strong>.
               </p>
               <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-[11.5px]">
-                <strong>Trạng thái máy chủ:</strong> Nếu chưa cấu hình <code>FACEBOOK_ACCESS_TOKEN</code> trong biến môi trường, lượt quét Facebook sẽ báo lỗi <code>FACEBOOK_TOKEN_MISSING</code> (16 nguồn lỗi) và không hiển thị dữ liệu cũ.
+                <strong>Trạng thái máy chủ:</strong> Nếu chưa cấu hình <code>FACEBOOK_ACCESS_TOKEN</code> trong biến môi trường, hệ thống sẽ tự động chỉ chạy nguồn Website hoặc báo lỗi <code>FACEBOOK_TOKEN_MISSING</code>.
               </div>
               <div>
                 <strong className="text-[#0f2357] block mb-1">Cách thiết lập trên Vercel:</strong>

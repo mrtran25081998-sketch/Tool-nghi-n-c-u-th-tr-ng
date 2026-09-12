@@ -18,7 +18,7 @@ export default function SummaryPage() {
   // 2. Scan Filter State
   const [dateFrom, setDateFrom] = useState(() => {
     const d = new Date();
-    d.setMonth(d.getMonth() - 2);
+    d.setMonth(d.getMonth() - 6);
     return d.toISOString().split('T')[0];
   });
   const [dateTo, setDateTo] = useState(() => {
@@ -27,7 +27,7 @@ export default function SummaryPage() {
   const [selectedBankIds, setSelectedBankIds] = useState<string[]>([]);
   const [scanSources, setScanSources] = useState<{ website: boolean; facebook: boolean }>({
     website: true,
-    facebook: true,
+    facebook: false,
   });
 
   // 3. Live Mode vs Demo Mode
@@ -86,10 +86,11 @@ export default function SummaryPage() {
     }
   }, []);
 
-  // Load Source Alerts
-  const loadAlerts = useCallback(async () => {
+  // Load Source Alerts (scoped to scanId if provided)
+  const loadAlerts = useCallback(async (scanId?: string) => {
     try {
-      const res = await fetch('/api/alerts');
+      const url = scanId ? `/api/alerts?scan_id=${encodeURIComponent(scanId)}` : '/api/alerts';
+      const res = await fetch(url);
       const json = await res.json();
       if (json.data) {
         setAlerts(json.data.filter((a: SourceAlert) => !a.resolved));
@@ -156,6 +157,10 @@ export default function SummaryPage() {
         throw new Error(json.error || 'Không thể khởi tạo lượt quét');
       }
 
+      if (json.warning) {
+        showToast(`⚠️ ${json.warning}`);
+      }
+
       const job: ScanJobDetail = json.data;
       const jobId = job.id;
 
@@ -203,7 +208,8 @@ export default function SummaryPage() {
           setItems(fetchedItems);
         }
 
-        loadAlerts();
+        // Only load alerts of this current scan
+        loadAlerts(completedJob.id);
 
         showToast(
           savedCount > 0
@@ -220,13 +226,15 @@ export default function SummaryPage() {
         setActiveScanId(null);
         setItems([]);
         setLastScanReport({
+          scanId: job.id,
           metrics: json.metrics || job.metrics,
           sourceResults: json.sourceResults || job.sourceResults,
           rejectedCandidates: json.rejectedCandidates || job.rejectedCandidates,
           status: 'failed',
         });
-        loadAlerts();
-        showToast('Lượt quét thất bại (Không có nguồn nào kết nối thành công)');
+        loadAlerts(job.id);
+        const failMsg = job.currentStage || 'Lượt quét thất bại (Không có nguồn nào kết nối thành công)';
+        showToast(failMsg);
         return;
       }
 
@@ -262,8 +270,9 @@ export default function SummaryPage() {
                 rejectedCandidates: pollJson.rejectedCandidates || currentJob.rejectedCandidates,
                 status: pollJson.status || currentJob.status,
               });
-              loadAlerts();
-              showToast(currentJob.status === 'cancelled' ? 'Lượt quét đã bị hủy' : 'Lượt quét thất bại (16 nguồn lỗi Facebook Token)');
+              loadAlerts(currentJob.id);
+              const failMsg = currentJob.currentStage || 'Lượt quét thất bại (Không có nguồn nào kết nối thành công)';
+              showToast(currentJob.status === 'cancelled' ? 'Lượt quét đã bị hủy' : failMsg);
             }
           }
         } catch (pollErr) {
@@ -299,7 +308,7 @@ export default function SummaryPage() {
       const json = await res.json();
       if (json.success) {
         showToast(json.message);
-        loadAlerts();
+        loadAlerts(activeScanId || lastScanReport?.scanId);
       } else {
         showToast(json.message || 'Thử lại thất bại');
       }

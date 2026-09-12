@@ -428,6 +428,14 @@ async function runScanWorkerInternal(scanId: string): Promise<void> {
 
       // Save alert to source_alerts
       if (supabase) {
+        const targetBankId = sourceType === 'facebook' && errorCode === 'FACEBOOK_TOKEN_MISSING' ? 'ALL_BANKS' : bankId;
+
+        // Resolve previous unresolved alerts for this bank + source_type before inserting new
+        await supabase
+          .from('source_alerts')
+          .update({ resolved: true })
+          .match({ bank_id: targetBankId, source_type: sourceType, resolved: false });
+
         if (sourceType === 'facebook' && errorCode === 'FACEBOOK_TOKEN_MISSING') {
           if (!facebookTokenAlertLogged) {
             facebookTokenAlertLogged = true;
@@ -460,6 +468,14 @@ async function runScanWorkerInternal(scanId: string): Promise<void> {
     } else {
       aggregatedMetrics.sourcesSucceeded++;
       aggregatedMetrics.itemsSaved += itemsFound;
+
+      // Resolve prior alerts if this source now succeeds
+      if (supabase) {
+        await supabase
+          .from('source_alerts')
+          .update({ resolved: true })
+          .match({ bank_id: bankId, source_type: sourceType, resolved: false });
+      }
     }
 
     // Update scan_job_sources in Supabase

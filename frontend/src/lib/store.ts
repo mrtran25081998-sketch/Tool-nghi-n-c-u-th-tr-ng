@@ -612,18 +612,135 @@ class Store {
     if (alert) {
       alert.resolved = true;
     }
+    const supabase = this.getClient();
+    if (supabase) {
+      await supabase.from('source_alerts').update({ resolved: true }).eq('id', id);
+    }
   }
 
   async retrySourceAlert(id: string): Promise<{ success: boolean; message: string }> {
-    const alert = this.sourceAlerts.find((a) => a.id === id);
-    if (!alert) return { success: false, message: 'Không tìm thấy cảnh báo' };
+    let alertData: SourceAlert | undefined = this.sourceAlerts.find((a) => a.id === id);
+    const supabase = this.getClient();
 
-    // Simulate real re-check with successful resolution
-    alert.resolved = true;
-    alert.checkedAt = new Date().toISOString();
-    return { success: true, message: `Đã kết nối lại thành công tới nguồn của ${alert.bankName}` };
+    if (!alertData && supabase) {
+      const { data, error } = await supabase.from('source_alerts').select('*').eq('id', id).maybeSingle();
+      if (!error && data) {
+        alertData = {
+          id: data.id,
+          bankId: data.bank_id,
+          bankName: data.bank_name,
+          sourceType: data.source_type,
+          errorCause: data.error_cause,
+          httpStatus: data.http_status,
+          checkedAt: data.checked_at,
+          resolved: data.resolved,
+          scanId: data.scan_id,
+        };
+      }
+    }
+
+    if (!alertData) {
+      return { success: false, message: 'Không tìm thấy cảnh báo nguồn' };
+    }
+
+    // Lookup source configuration
+    const sourcePairs = await this.getSourcePairs();
+    const sourceConfig = sourcePairs.find((s) => s.bank_id === alertData!.bankId);
+
+    if (alertData.sourceType === 'facebook') {
+      const fbToken = process.env.FACEBOOK_ACCESS_TOKEN?.trim();
+      if (!fbToken) {
+        return {
+          success: false,
+          message: 'Facebook Token chưa được cấu hình (FACEBOOK_ACCESS_TOKEN). Vẫn chưa thể kết nối Fanpage.',
+        };
+      }
+
+      const pageId = sourceConfig?.facebook_page_id;
+      if (pageId) {
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 12000);
+          const res = await fetch(
+            `https://graph.facebook.com/v19.0/${encodeURIComponent(pageId)}?fields=id,name&access_token=${fbToken}`,
+            { signal: controller.signal }
+          );
+          clearTimeout(timer);
+          if (!res.ok) {
+            const errData = await res.json().catch(() => ({}));
+            return {
+              success: false,
+              message: `Facebook trả về mã lỗi HTTP ${res.status}: ${errData.error?.message || 'Không thể xác thực Fanpage'}`,
+            };
+          }
+        } catch (err: any) {
+          return {
+            success: false,
+            message: `Kiểm tra kết nối Facebook thất bại: ${err.message || 'Timeout sau 12s'}`,
+          };
+        }
+      }
+    } else {
+      // Website source check
+      const targetUrl = sourceConfig?.business_hub_url || sourceConfig?.website_url;
+      if (!targetUrl || !targetUrl.startsWith('http')) {
+        return {
+          success: false,
+          message: `Không tìm thấy URL cấu hình website hợp lệ cho ${alertData.bankName}`,
+        };
+      }
+
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 12000);
+        const res = await fetch(targetUrl, {
+          method: 'GET',
+          headers: {
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36 (MB-Competitive-Intel/2.0; +https://mbbank.com.vn)',
+            Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+          },
+          signal: controller.signal,
+        });
+        clearTimeout(timer);
+
+        if (!res.ok) {
+          return {
+            success: false,
+            message: `Website của ${alertData.bankName} (${targetUrl}) trả về lỗi HTTP ${res.status}. Vẫn chưa thể kết nối.`,
+          };
+        }
+      } catch (err: any) {
+        return {
+          success: false,
+          message: `Không thể kết nối website ${targetUrl}: ${err.message || 'Hết thời gian chờ (12s)'}`,
+        };
+      }
+    }
+
+    // Only resolve if actual check passed!
+    const nowIso = new Date().toISOString();
+    if (this.sourceAlerts.some((a) => a.id === id)) {
+      const inMem = this.sourceAlerts.find((a) => a.id === id);
+      if (inMem) {
+        inMem.resolved = true;
+        inMem.checkedAt = nowIso;
+      }
+    }
+
+    if (supabase) {
+      await supabase
+        .from('source_alerts')
+        .update({ resolved: true, checked_at: nowIso })
+        .eq('id', id);
+    }
+
+    return {
+      success: true,
+      message: `Đã kết nối lại thành công tới nguồn ${alertData.sourceType === 'website' ? 'Website' : 'Facebook'} của ${alertData.bankName}`,
+    };
   }
-
   // --- SCAN JOBS ---
   async createScanJobDetail(params: {
     dateFrom: string;

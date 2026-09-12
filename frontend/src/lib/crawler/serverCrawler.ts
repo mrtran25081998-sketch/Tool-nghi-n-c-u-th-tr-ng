@@ -544,16 +544,24 @@ export function evaluateAudience(
   }
 
   // Determine if URL is within a corporate section
-  const isCorporateUrl =
-    urlLower.includes('/khach-hang-doanh-nghiep') ||
-    urlLower.includes('/doanh-nghiep') ||
-    urlLower.includes('/sme') ||
-    urlLower.includes('/corporate') ||
-    urlLower.includes('/business') ||
-    urlLower.includes('/biz') ||
-    urlLower.includes('/ho-kinh-doanh');
+  const corporateUrlPatterns = [
+    '/khach-hang-doanh-nghiep',
+    '/doanh-nghiep',
+    '/to-chuc',
+    '/kh-dn',
+    '/khdn',
+    '/corporate',
+    '/business',
+    '/sme',
+    '/smb',
+    '/enterprise',
+    '/ho-kinh-doanh',
+    '/ebank',
+    '/biz',
+  ];
+  const isCorporateUrl = corporateUrlPatterns.some((pat) => urlLower.includes(pat));
 
-  // Check positive corporate keywords
+  // Check positive corporate keywords (title, description, and body content as supporting signal)
   const matchedCorporate: string[] = [];
   for (const kw of CORPORATE_KEYWORDS) {
     if (normalizedTitle.includes(kw) || normalizedText.includes(kw)) {
@@ -599,10 +607,12 @@ export function evaluateAudience(
     };
   }
 
-  // Check strong personal exclusions for general pages
+  // Check strong personal exclusions for general pages ONLY on high confidence signals (title & meta description)
+  // Never eliminate based on body/menu/footer text
+  const highConfidenceSignals = `${normalizedTitle} ${(description || '').toLowerCase()}`;
   for (const exc of EXCLUSION_KEYWORDS) {
     const normalizedExc = exc.toLowerCase().replace(/[’‘`]/g, "'").replace(/[“”]/g, '"');
-    if (normalizedTitle.includes(normalizedExc) || normalizedText.includes(normalizedExc)) {
+    if (highConfidenceSignals.includes(normalizedExc)) {
       return {
         isCorporate: false,
         audience: 'Cá nhân / Tiêu dùng',
@@ -664,12 +674,85 @@ export function detectCategory(text: string): string {
 }
 
 /**
+ * Score a candidate URL and link anchor text to prioritize news, promos, and fresh content
+ */
+export function scoreCandidateLink(urlStr: string, linkText: string = ''): number {
+  let score = 0;
+  const lowerUrl = urlStr.toLowerCase();
+  const lowerText = (linkText || '').toLowerCase();
+  const combined = `${lowerUrl} ${lowerText}`;
+
+  // Tin tức, bài viết, sự kiện: +100
+  if (
+    combined.includes('tin-tuc') ||
+    combined.includes('tin_tuc') ||
+    combined.includes('tin tức') ||
+    combined.includes('bai-viet') ||
+    combined.includes('bài viết') ||
+    combined.includes('su-kien') ||
+    combined.includes('sự kiện') ||
+    combined.includes('news') ||
+    combined.includes('article') ||
+    combined.includes('press') ||
+    combined.includes('event')
+  ) {
+    score += 100;
+  }
+
+  // Ưu đãi, khuyến mại, chương trình: +95
+  if (
+    combined.includes('uu-dai') ||
+    combined.includes('ưu đãi') ||
+    combined.includes('khuyen-mai') ||
+    combined.includes('khuyến mại') ||
+    combined.includes('chuong-trinh') ||
+    combined.includes('chương trình') ||
+    combined.includes('promotion') ||
+    combined.includes('offer') ||
+    combined.includes('campaign')
+  ) {
+    score += 95;
+  }
+
+  // Chi tiết/detail: +70
+  if (
+    lowerUrl.includes('chi-tiet') ||
+    lowerUrl.includes('detail') ||
+    lowerUrl.includes('/post/') ||
+    lowerUrl.includes('/view/')
+  ) {
+    score += 70;
+  }
+
+  // URL chứa ngày tháng năm 202x: +60
+  if (/202\d/.test(lowerUrl)) {
+    score += 60;
+  }
+
+  // Sản phẩm, giải pháp, dịch vụ cố định: +25
+  if (
+    combined.includes('san-pham') ||
+    combined.includes('sản phẩm') ||
+    combined.includes('giai-phap') ||
+    combined.includes('giải pháp') ||
+    combined.includes('dich-vu') ||
+    combined.includes('dịch vụ') ||
+    combined.includes('product') ||
+    combined.includes('solution') ||
+    combined.includes('service')
+  ) {
+    score += 25;
+  }
+
+  return score;
+}
+
+/**
  * Discover candidate article links from HTML page
- * Do NOT drop ebank URLs (essential corporate digital banking content)
- * Allow subdomains within the same registrable domain
+ * Collects all candidate links, scores them by relevance and freshness, then slices top maxLinks
  */
 export function discoverArticleLinks(html: string, baseUrl: string, maxLinks: number = 15): string[] {
-  const links: string[] = [];
+  const candidates: { url: string; score: number }[] = [];
   const seen = new Set<string>();
   const baseObj = new URL(baseUrl);
   const baseDomain = getRegistrableDomain(baseObj.hostname);
@@ -737,27 +820,16 @@ export function discoverArticleLinks(html: string, baseUrl: string, maxLinks: nu
         continue;
       }
 
-      // Accept all non-excluded links within the same domain.
-      // Corporate signal detection is used for PRIORITY sorting, not strict gating,
-      // because many bank pages have no CTA text in link anchors.
-      const combined = `${parsed.pathname} ${linkText}`;
-      const hasCorporateSignal =
-        CORPORATE_KEYWORDS.some((kw) => combined.includes(kw)) ||
-        /\/(chi-tiet|tin-tuc|san-pham|giai-phap|dich-vu|uu-dai|khuyen-mai|khcn-dn|corporate|business|sme|smb|enterprise|ebank|biz|ngan-hang-so|vay|tin-dung|bao-lanh|tai-tro|tien-gui|thanh-toan|thu-ho|chi-ho|quan-ly|phat-hanh)\//i.test(path);
-
-      // Accept link regardless (we'll filter by content later)
-      // But prioritise corporate-signal links by inserting them first
       seen.add(normalized);
-      if (hasCorporateSignal) {
-        links.unshift(normalized);
-      } else {
-        links.push(normalized);
-      }
-      if (links.length >= maxLinks) break;
+      const score = scoreCandidateLink(normalized, linkText);
+      candidates.push({ url: normalized, score });
     } catch {}
   }
 
-  return links;
+  // Sort by priority score descending so news, promotions and articles are crawled first
+  candidates.sort((a, b) => b.score - a.score);
+
+  return candidates.map((c) => c.url).slice(0, maxLinks);
 }
 
 /**
@@ -1099,25 +1171,15 @@ export async function crawlBankWebsite(config: {
     }
 
     // 4. Date validity check:
-    // News articles require a published date. Active corporate products/promotions are recognized on the live site.
+    // If published date is missing, check if an effective start date was found on the page
     if (!dates.publishedAt) {
-      if (pageType === 'product' || pageType === 'promotion' || pageType === 'unknown') {
-        // Active corporate banking product/promotion in live catalog - no strict publish date required:
-        if (dates.effectiveFrom) {
-          dates.publishedAt = dates.effectiveFrom;
-          dates.dateSource = `Ngày bắt đầu hiệu lực (${pageType})`;
-        } else if (dates.effectiveTo) {
-          dates.publishedAt = dates.effectiveTo;
-          dates.dateSource = `Ngày kết thúc hiệu lực (${pageType})`;
-        } else {
-          dates.publishedAt = dateTo;
-          dates.dateSource = `Trang ${pageType} hiện hành trên website`;
-        }
+      if (dates.effectiveFrom) {
+        dates.publishedAt = dates.effectiveFrom;
+        dates.dateSource = `Ngày bắt đầu hiệu lực (${pageType})`;
         auditItem.publishedAt = dates.publishedAt;
         auditItem.effectiveFrom = dates.effectiveFrom;
         auditItem.effectiveTo = dates.effectiveTo;
       } else {
-        // article page: strict date required
         itemsMissingDate++;
         itemsRejectedByDate++;
         auditItem.rejectionReason = 'DATE_MISSING';
@@ -1127,19 +1189,12 @@ export async function crawlBankWebsite(config: {
     }
 
     // 5. Date range boundary check:
+    // Strict enforcement: Never accept content outside user-selected date range [dateFrom, dateTo]
     if (dates.publishedAt < dateFrom || dates.publishedAt > dateTo) {
-      if (pageType === 'product' || pageType === 'promotion') {
-        // An active corporate product/promotion on the bank's live website is currently available in the research period:
-        auditItem.effectiveFrom = dates.publishedAt;
-        dates.publishedAt = dateTo;
-        dates.dateSource = `Trang ${pageType} hiện hành trên website (ra mắt ${auditItem.effectiveFrom})`;
-        auditItem.publishedAt = dates.publishedAt;
-      } else {
-        itemsRejectedByDate++;
-        auditItem.rejectionReason = 'DATE_OUT_OF_RANGE';
-        candidateAudit.push(auditItem);
-        continue;
-      }
+      itemsRejectedByDate++;
+      auditItem.rejectionReason = 'DATE_OUT_OF_RANGE';
+      candidateAudit.push(auditItem);
+      continue;
     }
 
     // All criteria passed: Candidate is verified and accepted!

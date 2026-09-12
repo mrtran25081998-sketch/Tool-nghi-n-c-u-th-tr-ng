@@ -21,8 +21,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const fromDate = body.fromDate || body.date_from;
     const toDate = body.toDate || body.date_to;
-    const bankIds = body.bankIds || body.selected_banks || [];
-    const sourceTypes = body.sourceTypes || body.source_types || ['website'];
+    const bankIds = body.bankIds ?? body.selected_banks;
+    const rawSourceTypes = body.sourceTypes || body.source_types || ['website'];
 
     if (!fromDate || !toDate) {
       return NextResponse.json(
@@ -38,11 +38,53 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!sourceTypes || sourceTypes.length === 0) {
+    // Validate bankIds must be an array
+    if (!Array.isArray(bankIds) || bankIds.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'Danh sách ngân hàng (bankIds) không hợp lệ hoặc để trống' },
+        { status: 400 }
+      );
+    }
+
+    // Validate sourceTypes array and accept only 'website' or 'facebook'
+    if (!Array.isArray(rawSourceTypes) || rawSourceTypes.length === 0) {
       return NextResponse.json(
         { success: false, error: 'Bắt buộc chọn ít nhất một nguồn quét (Website hoặc Facebook)' },
         { status: 400 }
       );
+    }
+
+    const validSourceTypes = rawSourceTypes.filter(
+      (st: string): st is 'website' | 'facebook' => st === 'website' || st === 'facebook'
+    );
+    if (validSourceTypes.length === 0) {
+      return NextResponse.json(
+        { success: false, error: 'Nguồn quét không hợp lệ. Chỉ chấp nhận website hoặc facebook' },
+        { status: 400 }
+      );
+    }
+
+    // Check Facebook token configuration
+    const hasFacebookToken = Boolean(process.env.FACEBOOK_ACCESS_TOKEN?.trim());
+    let effectiveSourceTypes: ('website' | 'facebook')[] = [...validSourceTypes];
+    let warning: string | undefined = undefined;
+
+    if (effectiveSourceTypes.includes('facebook') && !hasFacebookToken) {
+      if (effectiveSourceTypes.includes('website')) {
+        // Both Website & Facebook chosen: run website only, return warning
+        effectiveSourceTypes = effectiveSourceTypes.filter((st) => st !== 'facebook');
+        warning = 'Facebook chưa được kết nối nên lượt quét chỉ chạy nguồn Website.';
+      } else {
+        // Facebook only chosen without token: return HTTP 503
+        return NextResponse.json(
+          {
+            success: false,
+            code: 'FACEBOOK_TOKEN_MISSING',
+            error: 'Facebook Token chưa được cấu hình. Vui lòng cấu hình FACEBOOK_ACCESS_TOKEN hoặc chọn thêm Website.',
+          },
+          { status: 503 }
+        );
+      }
     }
 
     // Validate bank IDs
@@ -62,7 +104,7 @@ export async function POST(req: NextRequest) {
       dateFrom: fromDate,
       dateTo: toDate,
       selectedBanks: validBankIds,
-      sourceTypes,
+      sourceTypes: effectiveSourceTypes,
     });
 
     // Use exactly one execution path. The previous implementation started both
@@ -97,7 +139,8 @@ export async function POST(req: NextRequest) {
         scanId: job.id,
         status: 'queued',
         data: job,
-        message: 'Lượt quét đã được tạo và đưa vào hàng đợi',
+        warning,
+        message: warning ? `Lượt quét đã được tạo. Lưu ý: ${warning}` : 'Lượt quét đã được tạo và đưa vào hàng đợi',
       },
       { status: 202 }
     );

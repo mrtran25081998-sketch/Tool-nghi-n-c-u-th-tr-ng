@@ -227,3 +227,55 @@ describe('F. API Contract & Response Format Test', () => {
     expect(pageType).toBe('unknown');
   });
 });
+
+describe('G. Crawler Audience & Priority Refinements', () => {
+  test('Trang sản phẩm doanh nghiệp có menu chứa "khách hàng cá nhân" vẫn được chấp nhận', () => {
+    const htmlBodyWithMenu = `
+      <header><nav><a href="/khach-hang-ca-nhan">Khách hàng cá nhân</a></nav></header>
+      <main>
+        <h1>Tài khoản thanh toán đa tiện ích cho Khách hàng Doanh nghiệp</h1>
+        <p>Giải pháp tối ưu dòng tiền, tài trợ vốn lưu động và quản lý chi hộ doanh nghiệp.</p>
+      </main>
+      <footer>Dành cho cả khách hàng cá nhân và doanh nghiệp</footer>
+    `;
+    const res = evaluateAudience(
+      'Tài khoản thanh toán doanh nghiệp BIZ',
+      'Giải pháp tài khoản thanh toán ưu việt cho doanh nghiệp và hộ kinh doanh',
+      htmlBodyWithMenu,
+      'https://techcombank.com/khach-hang-doanh-nghiep/san-pham/tai-khoan-doanh-nghiep'
+    );
+    expect(res.isCorporate).toBe(true);
+    expect(res.rejectionReason).toBeUndefined();
+  });
+
+  test('URL cá nhân rõ ràng vẫn bị loại', () => {
+    const res = evaluateAudience(
+      'Mở thẻ tín dụng hoàn tiền không giới hạn',
+      'Ưu đãi hoàn tiền thẻ tín dụng tiêu dùng',
+      'Chi tiết điều kiện phát hành thẻ cho khách hàng',
+      'https://techcombank.com/khach-hang-ca-nhan/the/the-tin-dung-ca-nhan'
+    );
+    expect(res.isCorporate).toBe(false);
+    expect(res.rejectionReason).toBe('PERSONAL_CONTENT');
+  });
+
+  test('Link tin tức/ưu đãi được ưu tiên trước link sản phẩm cố định', () => {
+    const html = `
+      <div>
+        <a href="/doanh-nghiep/san-pham/tai-khoan">Sản phẩm tài khoản cố định</a>
+        <a href="/doanh-nghiep/dich-vu/chuyen-tien">Dịch vụ chuyển tiền</a>
+        <a href="/doanh-nghiep/tin-tuc/uu-dai-lai-suat-2026">Tin tức ưu đãi lãi suất vay 2026</a>
+        <a href="/doanh-nghiep/khuyen-mai/mien-phi-quan-ly-2026">Chương trình khuyến mại miễn phí quản lý tài khoản</a>
+      </div>
+    `;
+    const links = discoverArticleLinks(html, 'https://techcombank.com/khach-hang-doanh-nghiep', 2);
+    expect(links.length).toBe(2);
+    // The top 2 sliced links must be the news/promos, not the static products
+    const hasNewsOrPromo0 = links[0].includes('tin-tuc') || links[0].includes('khuyen-mai');
+    const hasNewsOrPromo1 = links[1].includes('tin-tuc') || links[1].includes('khuyen-mai');
+    expect(hasNewsOrPromo0).toBe(true);
+    expect(hasNewsOrPromo1).toBe(true);
+    expect(links.some((l) => l.includes('san-pham/tai-khoan'))).toBe(false);
+  });
+});
+
