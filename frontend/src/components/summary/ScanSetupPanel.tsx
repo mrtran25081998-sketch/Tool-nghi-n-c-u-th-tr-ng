@@ -19,6 +19,8 @@ import { Bank } from '@/types';
 
 interface ScanSetupPanelProps {
   banks: Bank[];
+  isLoadingBanks?: boolean;
+  banksError?: string | null;
   dateFrom: string;
   dateTo: string;
   onDateFromChange: (val: string) => void;
@@ -41,6 +43,8 @@ interface ScanSetupPanelProps {
 
 export default function ScanSetupPanel({
   banks,
+  isLoadingBanks = false,
+  banksError = null,
   dateFrom,
   dateTo,
   onDateFromChange,
@@ -89,6 +93,11 @@ export default function ScanSetupPanel({
 
   const validateAndStart = () => {
     setValidationError(null);
+    if (isLoadingBanks) return;
+    if (banksError) {
+      setValidationError(banksError);
+      return;
+    }
     if (!dateFrom) {
       setValidationError('Vui lòng chọn Từ ngày');
       return;
@@ -205,45 +214,68 @@ export default function ScanSetupPanel({
         <div className="relative">
           <div className="flex items-center justify-between mb-1.5">
             <label className="block text-xs font-semibold text-[#344054]">
-              Ngân hàng ({selectedBankIds.length}/{banks.length}) <span className="text-red-500">*</span>
+              {isLoadingBanks ? (
+                <span className="flex items-center gap-1.5 text-[#667085]">
+                  <Loader2 className="w-3 h-3 animate-spin text-[#1646d8]" />
+                  Đang tải cấu hình ngân hàng...
+                </span>
+              ) : (
+                <>
+                  Ngân hàng ({selectedBankIds.length}/{banks.length}) <span className="text-red-500">*</span>
+                </>
+              )}
             </label>
-            <div className="flex items-center gap-2 text-[11px]">
-              <button
-                type="button"
-                onClick={handleSelectAll}
-                disabled={isScanning}
-                className="text-[#1646d8] hover:underline font-semibold cursor-pointer disabled:opacity-50"
-              >
-                Tất cả
-              </button>
-              <span className="text-gray-300">|</span>
-              <button
-                type="button"
-                onClick={handleDeselectAll}
-                disabled={isScanning}
-                className="text-[#667085] hover:underline cursor-pointer disabled:opacity-50"
-              >
-                Bỏ chọn
-              </button>
-            </div>
+            {!isLoadingBanks && (
+              <div className="flex items-center gap-2 text-[11px]">
+                <button
+                  type="button"
+                  onClick={handleSelectAll}
+                  disabled={isScanning}
+                  className="text-[#1646d8] hover:underline font-semibold cursor-pointer disabled:opacity-50"
+                >
+                  Tất cả
+                </button>
+                <span className="text-gray-300">|</span>
+                <button
+                  type="button"
+                  onClick={handleDeselectAll}
+                  disabled={isScanning}
+                  className="text-[#667085] hover:underline cursor-pointer disabled:opacity-50"
+                >
+                  Bỏ chọn
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* Trigger button */}
-          <button
-            type="button"
-            onClick={() => setIsBankDropdownOpen(!isBankDropdownOpen)}
-            disabled={isScanning}
-            className="w-full px-3 py-2 text-xs rounded-xl border border-[#d0d5dd] bg-white flex items-center justify-between text-left transition-all hover:border-[#1646d8] disabled:bg-gray-100 cursor-pointer"
-          >
-            <span className="truncate font-medium text-[#0f2357]">
-              {selectedBankIds.length === 0
-                ? 'Chưa chọn ngân hàng nào'
-                : selectedBankIds.length === banks.length
-                ? `Đã chọn tất cả ${banks.length} ngân hàng`
-                : `Đã chọn ${selectedBankIds.length}/${banks.length} ngân hàng`}
-            </span>
-            <span className="text-xs text-[#667085] ml-2">▼</span>
-          </button>
+          {/* Trigger button or loading skeleton */}
+          {isLoadingBanks ? (
+            <div className="w-full px-3 py-2 text-xs rounded-xl border border-[#d0d5dd] bg-gray-50 flex items-center justify-between text-[#667085] animate-pulse">
+              <span className="font-medium">Đang tải cấu hình 16 ngân hàng...</span>
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-[#1646d8]" />
+            </div>
+          ) : banksError ? (
+            <div className="w-full px-3 py-2 text-xs rounded-xl border border-red-300 bg-red-50 text-red-700 font-semibold flex items-center gap-1.5">
+              <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+              {banksError}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsBankDropdownOpen(!isBankDropdownOpen)}
+              disabled={isScanning}
+              className="w-full px-3 py-2 text-xs rounded-xl border border-[#d0d5dd] bg-white flex items-center justify-between text-left transition-all hover:border-[#1646d8] disabled:bg-gray-100 cursor-pointer"
+            >
+              <span className="truncate font-medium text-[#0f2357]">
+                {selectedBankIds.length === 0
+                  ? 'Chưa chọn ngân hàng nào'
+                  : selectedBankIds.length === banks.length
+                  ? `Đã chọn tất cả ${banks.length} ngân hàng`
+                  : `Đã chọn ${selectedBankIds.length}/${banks.length} ngân hàng`}
+              </span>
+              <span className="text-xs text-[#667085] ml-2">▼</span>
+            </button>
+          )}
 
           {/* Popover Dropdown with Search */}
           {isBankDropdownOpen && (
@@ -387,7 +419,8 @@ export default function ScanSetupPanel({
             <button
               type="button"
               onClick={validateAndStart}
-              className="px-6 py-2.5 rounded-xl bg-[#1646d8] text-white text-xs font-bold shadow-md hover:bg-[#123bb8] active:scale-[0.98] transition-all flex items-center gap-2 cursor-pointer"
+              disabled={isLoadingBanks || Boolean(banksError)}
+              className="px-6 py-2.5 rounded-xl bg-[#1646d8] text-white text-xs font-bold shadow-md hover:bg-[#123bb8] active:scale-[0.98] transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Play className="w-4 h-4 fill-white" />
               Bắt đầu quét
