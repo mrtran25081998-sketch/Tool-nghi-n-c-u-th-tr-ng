@@ -774,7 +774,7 @@ class Store {
 
       for (const art of bankWebsiteArticles) {
         const item: IntelligenceItem = {
-          id: 'item-' + Buffer.from(art.url).toString('base64url').slice(0, 24),
+          id: 'item-' + Buffer.from(art.url).toString('base64url'),
           bankId: bank.id,
           bankName: bank.name,
           publishedAt: art.publishedAt || '',
@@ -826,7 +826,7 @@ class Store {
         }
 
         mergedForBank.push({
-          id: 'item-' + Buffer.from(post.url).toString('base64url').slice(0, 24),
+          id: 'item-' + Buffer.from(post.url).toString('base64url'),
           bankId: bank.id,
           bankName: bank.name,
           publishedAt: post.publishedAt || '',
@@ -863,6 +863,8 @@ class Store {
               if (!isNaN(d.getTime())) safeIso = d.toISOString();
             }
 
+            const hash = Buffer.from(item.websiteUrl || item.facebookUrl || item.id).toString('base64url');
+
             return {
               id: crypto.randomUUID(),
               org_id: DEFAULT_ORG_ID,
@@ -876,7 +878,7 @@ class Store {
               title: item.title,
               summary: item.summary,
               raw_text: item.summary,
-              content_hash: item.id,
+              content_hash: hash,
               status: item.verificationStatus === 'review' ? 'needs_review' : 'accepted',
               metadata: {
                 category: item.category,
@@ -891,7 +893,13 @@ class Store {
             };
           });
 
-          await supabase.from('crawl_items').upsert(insertPayload, {
+          const uniqueByHash = new Map();
+          for (const row of insertPayload) {
+            uniqueByHash.set(row.content_hash, row);
+          }
+          const dedupedInsert = Array.from(uniqueByHash.values());
+
+          await supabase.from('crawl_items').upsert(dedupedInsert, {
             onConflict: 'org_id,bank_id,source_type,content_hash',
           });
         } catch (e) {
