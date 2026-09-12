@@ -44,6 +44,8 @@ export async function POST(req: NextRequest) {
           url,
           discovered_at: new Date().toISOString(),
           status: 'TRACKING' as const,
+          classification: 'PRODUCT_DETAIL' as const,
+          relevance_score: 80,
           source_type: 'website' as const,
           page_title: url.split('/').filter(Boolean).pop()?.replace(/[-_]/g, ' ') || 'Trang sản phẩm',
         }));

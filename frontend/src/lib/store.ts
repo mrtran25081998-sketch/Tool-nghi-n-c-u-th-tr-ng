@@ -229,12 +229,12 @@ class Store {
     return this.getBanks();
   }
 
-  // --- SOURCE PAIRS ---
+  // --- BANK SOURCES (FORMERLY SOURCE PAIRS) ---
   async getSourcePairs(): Promise<SourcePair[]> {
     const supabase = this.getClient();
     if (supabase) {
       const { data, error } = await supabase
-        .from('source_pairs')
+        .from('bank_sources')
         .select('*, banks(name)')
         .eq('org_id', this.orgId)
         .order('display_order', { ascending: true });
@@ -296,7 +296,7 @@ class Store {
 
     const supabase = this.getClient();
     if (supabase) {
-      const { data: dbData, error } = await supabase.from('source_pairs').insert({
+      const { data: dbData, error } = await supabase.from('bank_sources').insert({
         id: pair.id,
         org_id: this.orgId,
         bank_id: targetBankId,
@@ -322,7 +322,7 @@ class Store {
       delete dbUpdates.bank_name;
       delete dbUpdates.banks;
       await supabase
-        .from('source_pairs')
+        .from('bank_sources')
         .update(dbUpdates)
         .eq('id', id);
     }
@@ -339,7 +339,8 @@ class Store {
     const pair = this.sourcePairs.find((s) => s.id === id);
     if (!pair) throw new Error('Không tìm thấy nguồn');
 
-    const url = (type === 'facebook' ? pair.facebook_url : pair.website_url || '').trim();
+    const targetUrl = type === 'facebook' ? pair.facebook_url : pair.website_url;
+    const url = (targetUrl || '').trim();
     if (!url) throw new Error('Chưa có URL để xác thực');
 
     if (!url.startsWith('http://') && !url.startsWith('https://')) {
@@ -361,7 +362,7 @@ class Store {
     const supabase = this.getClient();
     if (supabase) {
       await supabase
-        .from('source_pairs')
+        .from('bank_sources')
         .update({
           facebook_verified: pair.facebook_verified,
           website_verified: pair.website_verified,
@@ -376,7 +377,7 @@ class Store {
   async deleteSourcePair(id: string): Promise<void> {
     const supabase = this.getClient();
     if (supabase) {
-      await supabase.from('source_pairs').delete().eq('id', id);
+      await supabase.from('bank_sources').delete().eq('id', id);
     }
     this.sourcePairs = this.sourcePairs.filter((s) => s.id !== id);
   }
@@ -392,110 +393,65 @@ class Store {
     search?: string;
     mode?: 'live' | 'demo';
   }): Promise<IntelligenceItem[]> {
-    let items = [...this.intelligenceItems];
-
-    // Supabase integration if available
     const supabase = this.getClient();
     if (supabase) {
-      try {
-        let query = supabase.from('crawl_items').select('*, banks(name)');
-        if (params?.scan_id) {
-          query = query.eq('job_id', params.scan_id);
-        }
-        const { data, error } = await query;
-        if (!error && data && data.length > 0) {
-          // Helper: strip Angular/template artifacts from summary text
-          const cleanSummary = (text: string): string => {
-            if (!text) return '';
-            return text
-              .replace(/ng-[a-z-]+=\s*"[^"]*"/gi, ' ')
-              .replace(/ng-[a-z-]+=\s*'[^']*'/gi, ' ')
-              .replace(/\{\{[^}]*\}\}/g, ' ')
-              .replace(/\$index|\$scope|\$emit|emit-last-repeater/g, ' ')
-              .replace(/track by \S+/g, ' ')
-              .replace(/'[a-z-]+':!?\([^)]+\)/g, ' ')
-              .replace(/,\s*'[a-z-]+':!?\([^)]+\)/g, ' ')
-              .replace(/\s+/g, ' ')
-              .trim()
-              .slice(0, 500); // cap at 500 chars
-          };
+      let query = supabase.from('crawl_items').select('*');
+      if (params?.scan_id) {
+        query = query.eq('scan_id', params.scan_id);
+      }
+      if (params?.bank_ids && params.bank_ids.length > 0) {
+        query = query.in('bank_id', params.bank_ids);
+      }
+      if (params?.date_from) {
+        query = query.gte('published_at', params.date_from);
+      }
+      if (params?.date_to) {
+        query = query.lte('published_at', params.date_to);
+      }
+      if (params?.status && params.status !== 'all' && params.status !== 'Tất cả') {
+        const mappedStatus = params.status === 'review' ? 'review' : 'verified';
+        query = query.eq('verification_status', mappedStatus);
+      }
+      if (params?.category && params.category !== 'all' && params.category !== 'Tất cả') {
+        query = query.eq('category', params.category);
+      }
 
-          const dbItems: IntelligenceItem[] = data
-            // Exclude test/demo rows, generic homepages, personal banking, and invalid records
-            .filter((d: any) => {
-              const t = (d.title || '').toLowerCase().trim();
-              const u = (d.canonical_url || d.source_url || '').toLowerCase().trim();
-              const s = (d.summary || '').toLowerCase().trim();
-              const metaAudience = (d.metadata?.audience || '').toLowerCase();
-              return (
-                !t.startsWith('test ') &&
-                t !== 'test' &&
-                !t.includes('test article') &&
-                !u.includes('/chi-tiet/test') &&
-                !s.includes('test summary') &&
-                !t.includes('ngân hàng quân đội | mbbank') &&
-                !t.includes('khách hàng cá nhân') &&
-                !u.includes('/ca-nhan') &&
-                !u.includes('/khcn') &&
-                !u.includes('-khcn') &&
-                !u.includes('/documents') &&
-                !u.includes('/tools_slug') &&
-                !u.includes('/ve-vietcombank') &&
-                !t.includes('moody') &&
-                !t.includes('cuối tuần lộc lá') &&
-                !t.includes('mastercard platinum') &&
-                metaAudience !== 'cá nhân' &&
-                t !== 'undefined' &&
-                t.length > 0
-              );
-            })
-            .map((d: any) => {
-              const meta = d.metadata || {};
-              return {
-                id: d.id,
-                bankId: d.bank_id,
-                bankName: d.banks?.name || 'Ngân hàng',
-                publishedAt: d.published_at ? d.published_at.slice(0, 10) : '',
-                title: d.title || 'Sản phẩm mới',
-                category: meta.category || meta.productCategory || 'Giao dịch & Thanh toán',
-                summary: cleanSummary(d.summary || d.raw_text || d.title),
-                audience: meta.audience || 'Doanh nghiệp',
-                audienceReason: meta.audienceReason,
-                dateReason: meta.dateReason,
-                websiteUrl: meta.websiteUrl || (d.source_type === 'website' ? d.canonical_url || d.source_url : undefined),
-                facebookUrl: meta.facebookUrl || (d.source_type === 'facebook' ? d.source_url : undefined),
-                sourceTypes: meta.sourceTypes || [d.source_type],
-                verificationStatus: d.status === 'needs_review' ? 'review' : 'verified',
-                confidenceScore: meta.confidenceScore ?? 0.95,
-                collectedAt: d.detected_at || new Date().toISOString(),
-                scanId: d.job_id,
-                isDemo: false,
-              };
-            });
-          // Merge unique by ID
-          const existingIds = new Set(dbItems.map((i: any) => i.id));
-          items = [...dbItems, ...items.filter((i) => !existingIds.has(i.id))];
-        }
-      } catch (err) {
-        console.warn('Supabase crawl_items query skipped, using memory store', err);
+      const { data, error } = await query.order('published_at', { ascending: false });
+      if (error) {
+        throw new Error(`Supabase crawl_items query error: ${error.message}`);
+      }
+
+      const dbItems: IntelligenceItem[] = (data || []).map((d: any) => ({
+        id: d.id,
+        bankId: d.bank_id,
+        bankName: d.bank_name || 'Ngân hàng',
+        publishedAt: d.published_at ? d.published_at.slice(0, 10) : '',
+        title: d.title || 'Sản phẩm mới',
+        category: d.category || 'Giao dịch & Thanh toán',
+        summary: d.summary || d.title,
+        audience: d.audience || 'Doanh nghiệp',
+        websiteUrl: d.website_url,
+        facebookUrl: d.facebook_url,
+        sourceTypes: d.source_types || (d.website_url ? ['website'] : ['facebook']),
+        verificationStatus: d.verification_status,
+        confidenceScore: d.confidence_score ?? 0.95,
+        collectedAt: d.collected_at || new Date().toISOString(),
+        scanId: d.scan_id,
+        isDemo: Boolean(d.is_demo),
+      }));
+
+      // When scan_id is explicitly requested, return ONLY dbItems (Strict scan isolation)
+      if (params?.scan_id) {
+        return dbItems;
+      }
+      if (dbItems.length > 0) {
+        return dbItems;
       }
     }
 
-    // 0. Scan ID filter if requested - returns all items discovered by this scan job
+    let items = [...this.intelligenceItems];
     if (params?.scan_id) {
-      items = items.filter((i) => i.scanId === params.scan_id);
-      const mode = params?.mode || 'live';
-      if (mode === 'live') {
-        items = items.filter((i) => !i.isDemo);
-      }
-      if (params?.status && params.status !== 'all' && params.status !== 'Tất cả') {
-        items = items.filter((i) => i.verificationStatus === params.status);
-      }
-      return items.sort((a, b) => {
-        if (!a.publishedAt) return 1;
-        if (!b.publishedAt) return -1;
-        return b.publishedAt.localeCompare(a.publishedAt);
-      });
+      return items.filter((i) => i.scanId === params.scan_id);
     }
 
     // 1. Mode filter: Live Mode strictly requires authentic non-demo items
@@ -569,11 +525,13 @@ class Store {
     const supabase = this.getClient();
     if (supabase) {
       try {
-        await supabase.from('intelligence_items').upsert({
+        await supabase.from('crawl_items').upsert({
           id: item.id,
           org_id: this.orgId,
+          scan_id: item.scanId,
           bank_id: item.bankId,
           bank_name: item.bankName,
+          canonical_url: item.websiteUrl || item.facebookUrl || item.id,
           published_at: item.publishedAt || null,
           title: item.title,
           category: item.category,
@@ -585,19 +543,40 @@ class Store {
           verification_status: item.verificationStatus,
           confidence_score: item.confidenceScore,
           collected_at: item.collectedAt,
-          scan_id: item.scanId || null,
           is_demo: Boolean(item.isDemo),
-        });
+        }, { onConflict: 'scan_id,bank_id,canonical_url' });
       } catch (err) {
-        console.warn('Supabase upsert intelligence_items failed', err);
+        console.warn('Supabase upsert crawl_items failed', err);
       }
     }
     return item;
   }
 
   // --- SOURCE ALERTS ---
-  async getSourceAlerts(): Promise<SourceAlert[]> {
-    return this.sourceAlerts.filter((a) => !a.resolved);
+  async getSourceAlerts(scanId?: string): Promise<SourceAlert[]> {
+    const supabase = this.getClient();
+    if (supabase) {
+      let query = supabase.from('source_alerts').select('*').eq('resolved', false);
+      if (scanId) {
+        query = query.eq('scan_id', scanId);
+      }
+      const { data, error } = await query.order('checked_at', { ascending: false });
+      if (!error && data) {
+        return data.map((d: any) => ({
+          id: d.id,
+          bankId: d.bank_id,
+          bankName: d.bank_name,
+          sourceType: d.source_type,
+          errorCause: d.error_cause,
+          errorMessage: d.error_cause,
+          httpStatus: d.http_status,
+          checkedAt: d.checked_at,
+          resolved: d.resolved,
+          scanId: d.scan_id,
+        }));
+      }
+    }
+    return this.sourceAlerts.filter((a) => !a.resolved && (!scanId || a.scanId === scanId));
   }
 
   async resolveSourceAlert(id: string): Promise<void> {
@@ -631,35 +610,72 @@ class Store {
       dateTo: params.dateTo,
       selectedBanks: params.selectedBanks,
       sourceTypes: params.sourceTypes,
-      status: 'running',
-      progressPercent: 10,
-      currentStage: `Đang khởi tạo lượt quét (${params.selectedBanks.length} ngân hàng)...`,
+      status: 'queued',
+      progressPercent: 0,
+      currentStage: `Đã đưa vào hàng đợi (${params.selectedBanks.length} ngân hàng)...`,
       currentBankName: '',
       totalFound: 0,
       createdAt: new Date().toISOString(),
+      metrics: {
+        selectedBanks: params.selectedBanks.length,
+        selectedSources: params.selectedBanks.length * params.sourceTypes.length,
+        sourcesAttempted: 0,
+        sourcesSucceeded: 0,
+        sourcesFailed: 0,
+        pagesDiscovered: 0,
+        pagesFetched: 0,
+        itemsParsed: 0,
+        itemsAccepted: 0,
+        itemsRejectedByDate: 0,
+        itemsRejectedByAudience: 0,
+        itemsMissingDate: 0,
+        itemsDeduplicated: 0,
+        itemsSaved: 0,
+      },
     };
 
     this.scanJobDetails.unshift(newJob);
 
     const supabase = this.getClient();
     if (supabase) {
-      try {
-        await supabase.from('crawl_jobs').upsert({
-          id,
-          org_id: DEFAULT_ORG_ID,
-          date_from: params.dateFrom,
-          date_to: params.dateTo,
-          status: 'running',
-          progress: 10,
-          error_summary: JSON.stringify({
-            currentStage: newJob.currentStage,
-            currentBankName: '',
-            selectedBanks: params.selectedBanks,
-            sourceTypes: params.sourceTypes,
-          }),
-        });
-      } catch (e) {
-        console.warn('Supabase crawl_jobs initial upsert warning:', e);
+      const { error: jobErr } = await supabase.from('scan_jobs').insert({
+        id,
+        org_id: DEFAULT_ORG_ID,
+        date_from: params.dateFrom,
+        date_to: params.dateTo,
+        selected_banks: params.selectedBanks,
+        source_types: params.sourceTypes,
+        status: 'queued',
+        progress_percent: 0,
+        current_stage: 'Đã đưa vào hàng đợi',
+        metrics: newJob.metrics || {},
+        total_found: 0,
+      });
+      if (jobErr) {
+        throw new Error(`Lỗi tạo lượt quét Supabase: ${jobErr.message}`);
+      }
+
+      // Create scan_job_sources rows in Supabase
+      const allBanks = await this.getBanks();
+      const sourceRows = [];
+      for (const bId of params.selectedBanks) {
+        const bank = allBanks.find((b) => b.id === bId);
+        for (const sType of params.sourceTypes) {
+          sourceRows.push({
+            scan_id: id,
+            bank_id: bId,
+            bank_name: bank?.name || 'Ngân hàng',
+            source_type: sType,
+            status: 'queued',
+            items_found: 0,
+          });
+        }
+      }
+      if (sourceRows.length > 0) {
+        const { error: srcErr } = await supabase.from('scan_job_sources').insert(sourceRows);
+        if (srcErr) {
+          console.warn('Lỗi tạo scan_job_sources:', srcErr.message);
+        }
       }
     }
 
@@ -667,407 +683,90 @@ class Store {
   }
 
   async runScanPipeline(job: ScanJobDetail) {
-    const allBanks = await this.getBanks();
-    const allSources = await this.getSourcePairs();
-
-    // Identify target banks by UUID
-    const bankTargets = allBanks.filter((b) => job.selectedBanks.includes(b.id));
-    const targetList = bankTargets.length > 0 ? bankTargets : allBanks;
-    const total = targetList.length;
-
-    const metrics: ScanMetrics = {
-      selectedBanks: total,
-      selectedSources: total * (job.sourceTypes.length || 1),
-      sourcesAttempted: 0,
-      sourcesSucceeded: 0,
-      sourcesFailed: 0,
-      pagesDiscovered: 0,
-      pagesFetched: 0,
-      itemsParsed: 0,
-      itemsAccepted: 0,
-      itemsRejectedByDate: 0,
-      itemsRejectedByAudience: 0,
-      itemsMissingDate: 0,
-      itemsDeduplicated: 0,
-      itemsSaved: 0,
-    };
-    const sourceResults: SourceExecutionResult[] = [];
-    const createdItems: IntelligenceItem[] = [];
-    const allCandidateAudit: CandidateAuditItem[] = [];
-
-    job.metrics = metrics;
-    job.sourceResults = sourceResults;
-
-    const supabase = this.getClient();
-
-    // Run banks concurrently for fast execution within serverless limits
-    const bankTasks = targetList.map(async (bank, idx) => {
-      const current = this.scanJobDetails.find((j) => j.id === job.id) || job;
-      if (!current || current.status === 'cancelled') return;
-
-      const sourcePair = allSources.find((sp) => sp.bank_id === bank.id);
-
-      const websiteUrl = sourcePair?.website_url || (bank as any).website_url || '';
-      const facebookUrl = sourcePair?.facebook_url || (bank as any).facebook_url || '';
-
-      current.currentBankName = bank.name;
-      current.currentStage = `Đang quét ngân hàng ${idx + 1}/${total} – ${bank.name}`;
-      current.progressPercent = Math.min(95, Math.round(10 + ((idx + 1) / total) * 80));
-
-      const tasks: Promise<any>[] = [];
-
-      // 1. Website Crawl task
-      if (job.sourceTypes.includes('website')) {
-        metrics.sourcesAttempted++;
-        tasks.push(
-          crawlBankWebsite({
-            bankId: bank.id,
-            bankName: bank.name,
-            corporateHomepageUrl: websiteUrl,
-            dateFrom: job.dateFrom,
-            dateTo: job.dateTo,
-            maxPages: 6,
-          }).then((res) => ({ type: 'website' as const, res }))
-        );
-      }
-
-      // 2. Facebook Crawl task
-      if (job.sourceTypes.includes('facebook')) {
-        metrics.sourcesAttempted++;
-        tasks.push(
-          crawlBankFacebook({
-            bankId: bank.id,
-            bankName: bank.name,
-            facebookUrl,
-            dateFrom: job.dateFrom,
-            dateTo: job.dateTo,
-          }).then((res) => ({ type: 'facebook' as const, res }))
-        );
-      }
-
-      const settled = await Promise.allSettled(tasks);
-
-      let bankWebsiteArticles: any[] = [];
-      let bankFacebookArticles: any[] = [];
-
-      for (const r of settled) {
-        if (r.status === 'fulfilled') {
-          const { type, res } = r.value;
-          metrics.pagesDiscovered += res.pagesDiscovered || 0;
-          metrics.pagesFetched += res.pagesFetched || 0;
-          metrics.itemsParsed += res.itemsParsed || 0;
-          metrics.itemsRejectedByDate += res.itemsRejectedByDate || 0;
-          metrics.itemsRejectedByAudience += res.itemsRejectedByAudience || 0;
-          metrics.itemsMissingDate += res.itemsMissingDate || 0;
-
-          if (res.candidateAudit && Array.isArray(res.candidateAudit)) {
-            allCandidateAudit.push(...res.candidateAudit);
-          }
-
-          if (res.status === 'success' || res.status === 'partial') {
-            metrics.sourcesSucceeded++;
-          } else if (res.status === 'failed' || res.status === 'unavailable') {
-            metrics.sourcesFailed++;
-          }
-
-          sourceResults.push({
-            bankId: bank.id,
-            bankName: bank.name,
-            sourceType: type,
-            status: res.status,
-            url: res.sourceUrl,
-            httpStatus: res.httpStatus,
-            discoveredCount: res.pagesDiscovered || 0,
-            savedCount: res.articles?.length || 0,
-            errorCode: res.errorCode,
-            errorMessage: res.errorMessage,
-          });
-
-          if (type === 'website') bankWebsiteArticles = res.articles || [];
-          if (type === 'facebook') bankFacebookArticles = res.articles || [];
-
-          // Add alert if source failed or unavailable
-          if (res.errorCode) {
-            this.sourceAlerts.unshift({
-              id: crypto.randomUUID(),
-              scanId: job.id,
-              bankId: bank.id,
-              bankName: bank.name,
-              sourceType: type,
-              errorCode: res.errorCode,
-              errorMessage: res.errorMessage || res.errorCode,
-              errorCause: res.errorMessage || res.errorCode,
-              httpStatus: res.httpStatus || undefined,
-              sourceUrl: res.sourceUrl,
-              checkedAt: new Date().toISOString(),
-              resolved: false,
-            });
-          }
-        } else {
-          metrics.sourcesFailed++;
-          sourceResults.push({
-            bankId: bank.id,
-            bankName: bank.name,
-            sourceType: 'website',
-            status: 'failed',
-            url: websiteUrl,
-            httpStatus: 0,
-            discoveredCount: 0,
-            savedCount: 0,
-            errorCode: 'EXECUTION_EXCEPTION',
-            errorMessage: r.reason?.message || 'Lỗi xử lý khi quét nguồn',
-          });
-        }
-      }
-
-      // Deduplication & Merge Website + Facebook
-      const mergedForBank: IntelligenceItem[] = [];
-
-      for (const art of bankWebsiteArticles) {
-        const item: IntelligenceItem = {
-          id: 'item-' + Buffer.from(art.url).toString('base64url'),
-          bankId: bank.id,
-          bankName: bank.name,
-          publishedAt: art.publishedAt || '',
-          title: art.title,
-          category: art.category,
-          summary: art.summary || art.description || art.content.slice(0, 250),
-          audience: art.targetAudience || art.audience,
-          audienceReason: art.audienceReason,
-          dateReason: art.dateReason || (art.hasDate ? undefined : 'DATE_NOT_FOUND'),
-          websiteUrl: art.url,
-          sourceTypes: ['website'],
-          verificationStatus: art.verificationStatus || (art.hasDate ? 'verified' : 'review'),
-          confidenceScore: art.confidenceScore || 0.95,
-          collectedAt: new Date().toISOString(),
-          scanId: job.id,
-          isDemo: false, // Authentic Live item!
-        };
-
-        // Check if matching facebook article exists
-        const fbMatchIdx = bankFacebookArticles.findIndex(
-          (fb) => fb.title.slice(0, 30).toLowerCase() === art.title.slice(0, 30).toLowerCase()
-        );
-        if (fbMatchIdx >= 0) {
-          const fbMatch = bankFacebookArticles[fbMatchIdx];
-          item.facebookUrl = fbMatch.url;
-          item.sourceTypes.push('facebook');
-          metrics.itemsDeduplicated++;
-          bankFacebookArticles.splice(fbMatchIdx, 1);
-        }
-
-        mergedForBank.push(item);
-      }
-
-      for (const post of bankFacebookArticles) {
-        const normPostTitle = (post.title || '').toLowerCase().trim();
-        const existing = mergedForBank.find(
-          (m) =>
-            m.title.toLowerCase().trim() === normPostTitle ||
-            (normPostTitle.length > 15 && m.title.toLowerCase().includes(normPostTitle.slice(0, 20)))
-        );
-
-        if (existing) {
-          existing.facebookUrl = post.url;
-          if (!existing.sourceTypes.includes('facebook')) {
-            existing.sourceTypes.push('facebook');
-          }
-          metrics.itemsDeduplicated++;
-          continue;
-        }
-
-        mergedForBank.push({
-          id: 'item-' + Buffer.from(post.url).toString('base64url'),
-          bankId: bank.id,
-          bankName: bank.name,
-          publishedAt: post.publishedAt || '',
-          title: post.title,
-          category: post.category,
-          summary: post.summary || post.description || post.content.slice(0, 250),
-          audience: post.targetAudience || post.audience,
-          audienceReason: post.audienceReason,
-          dateReason: post.dateReason || (post.hasDate ? undefined : 'DATE_NOT_FOUND'),
-          facebookUrl: post.url,
-          sourceTypes: ['facebook'],
-          verificationStatus: post.verificationStatus || (post.hasDate ? 'verified' : 'review'),
-          confidenceScore: post.confidenceScore || 0.85,
-          collectedAt: new Date().toISOString(),
-          scanId: job.id,
-          isDemo: false,
-        });
-      }
-
-      for (const item of mergedForBank) {
-        await this.addIntelligenceItem(item);
-        createdItems.push(item);
-        metrics.itemsSaved++;
-        metrics.itemsAccepted++;
-      }
-
-      // Persist items to Supabase crawl_items safely
-      if (supabase && mergedForBank.length > 0) {
-        try {
-          const insertPayload = mergedForBank.map((item) => {
-            let safeIso: string | null = null;
-            if (item.publishedAt) {
-              const d = new Date(item.publishedAt);
-              if (!isNaN(d.getTime())) safeIso = d.toISOString();
-            }
-
-            const hash = Buffer.from(item.websiteUrl || item.facebookUrl || item.id).toString('base64url');
-
-            return {
-              id: crypto.randomUUID(),
-              org_id: DEFAULT_ORG_ID,
-              job_id: job.id,
-              bank_id: item.bankId,
-              source_type: item.sourceTypes.includes('facebook') && !item.sourceTypes.includes('website') ? 'facebook' : 'website',
-              source_url: item.websiteUrl || item.facebookUrl || '',
-              canonical_url: item.websiteUrl || item.facebookUrl || '',
-              published_at: safeIso,
-              detected_at: new Date().toISOString(),
-              title: item.title,
-              summary: item.summary,
-              raw_text: item.summary,
-              content_hash: hash,
-              status: item.verificationStatus === 'review' ? 'needs_review' : 'accepted',
-              metadata: {
-                category: item.category,
-                audience: item.audience,
-                audienceReason: item.audienceReason,
-                dateReason: item.dateReason,
-                confidenceScore: item.confidenceScore,
-                websiteUrl: item.websiteUrl,
-                facebookUrl: item.facebookUrl,
-                sourceTypes: item.sourceTypes,
-              },
-            };
-          });
-
-          // Deduplicate within THIS scan only (same URL cannot appear twice in one scan)
-          const uniqueByJobHash = new Map<string, typeof insertPayload[0]>();
-          for (const row of insertPayload) {
-            uniqueByJobHash.set(`${row.job_id}::${row.content_hash}`, row);
-          }
-          const dedupedInsert = Array.from(uniqueByJobHash.values());
-
-          // Upsert with onConflict so existing items update their job_id to this latest scan
-          const { error: upsertErr } = await supabase.from('crawl_items').upsert(dedupedInsert, {
-            onConflict: 'org_id,bank_id,source_type,content_hash',
-          });
-          if (upsertErr) {
-            console.warn('crawl_items upsert warning:', upsertErr.message, upsertErr.code);
-          }
-        } catch (e) {
-          console.warn('Supabase crawl_items insert error:', e);
-        }
-      }
-    });
-
-    await Promise.allSettled(bankTasks);
-
-    const current = this.scanJobDetails.find((j) => j.id === job.id) || job;
-    if (current && current.status !== 'cancelled') {
-      let finalStatus: ScanJobDetail['status'] = 'completed';
-      if (metrics.sourcesFailed === 0 && metrics.itemsSaved > 0) {
-        finalStatus = 'success';
-      } else if (metrics.sourcesSucceeded > 0 && metrics.itemsSaved > 0) {
-        finalStatus = 'partial';
-      } else if (metrics.itemsSaved === 0 && metrics.sourcesSucceeded > 0) {
-        finalStatus = 'empty';
-      } else if (metrics.sourcesSucceeded === 0) {
-        finalStatus = 'failed';
-      }
-
-      metrics.sourceErrors = sourceResults.filter((s) => s.status === 'failed' || s.status === 'unavailable').length;
-      metrics.candidatesFound = allCandidateAudit.length;
-      metrics.accepted = metrics.itemsAccepted;
-      metrics.saved = metrics.itemsSaved;
-      metrics.returned = metrics.itemsSaved;
-      metrics.itemsReturned = metrics.itemsSaved;
-      metrics.itemsRendered = metrics.itemsSaved;
-
-      const rejected = allCandidateAudit.filter((c) => !c.accepted);
-      current.rejectedCandidates = rejected;
-      job.rejectedCandidates = rejected;
-
-      current.status = finalStatus;
-      current.progressPercent = 100;
-      current.currentStage =
-        finalStatus === 'failed'
-          ? `Lượt quét thất bại (${metrics.sourceErrors} nguồn lỗi). Không có dữ liệu để thu thập.`
-          : metrics.itemsSaved > 0
-          ? `Đã hoàn tất quét! Thu thập thành công ${metrics.itemsSaved} bản ghi doanh nghiệp.`
-          : `Lượt quét hoàn thành nhưng không tìm thấy nội dung phù hợp trong khoảng ngày.`;
-      current.finishedAt = new Date().toISOString();
-      current.totalFound = metrics.itemsSaved;
-      current.metrics = metrics;
-      current.sourceResults = sourceResults;
-
-      // Update Supabase crawl_jobs
-      if (supabase) {
-        try {
-          await supabase.from('crawl_jobs').update({
-            status: finalStatus,
-            progress: 100,
-            error_summary: JSON.stringify({
-              currentStage: current.currentStage,
-              currentBankName: current.currentBankName,
-              selectedBanks: current.selectedBanks,
-              sourceTypes: current.sourceTypes,
-              metrics: current.metrics,
-              sourceResults: current.sourceResults,
-              rejectedCandidates: current.rejectedCandidates,
-              finishedAt: current.finishedAt,
-            }),
-            finished_at: new Date().toISOString(),
-          }).eq('id', job.id);
-        } catch (e) {
-          console.warn('Supabase crawl_jobs final update warning:', e);
-        }
-      }
-    }
+    const { runScanWorker } = await import('@/lib/crawler/scanWorker');
+    await runScanWorker(job.id);
   }
 
   async getScanJobDetail(id: string): Promise<ScanJobDetail | null> {
-    const inMemory = this.scanJobDetails.find((j) => j.id === id);
-    if (inMemory) return inMemory;
-
     const supabase = this.getClient();
     if (supabase) {
-      try {
-        const { data } = await supabase.from('crawl_jobs').select('*').eq('id', id).maybeSingle();
-        if (data) {
-          let meta: any = {};
-          try {
-            meta = JSON.parse(data.error_summary || '{}');
-          } catch {}
+      const { data: job, error: jobErr } = await supabase
+        .from('scan_jobs')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
 
-          const reconstructed: ScanJobDetail = {
-            id: data.id,
-            dateFrom: data.date_from,
-            dateTo: data.date_to,
-            selectedBanks: meta.selectedBanks || [],
-            sourceTypes: meta.sourceTypes || ['website'],
-            status: data.status as any,
-            progressPercent: data.progress || 0,
-            currentStage: meta.currentStage || '',
-            currentBankName: meta.currentBankName || '',
-            totalFound: meta.metrics?.itemsSaved || 0,
-            createdAt: data.created_at,
-            finishedAt: data.finished_at,
-            metrics: meta.metrics,
-            sourceResults: meta.sourceResults || [],
-            rejectedCandidates: meta.rejectedCandidates || [],
-          };
-          this.scanJobDetails.push(reconstructed);
-          return reconstructed;
-        }
-      } catch (err) {
-        console.warn('Supabase getScanJobDetail error:', err);
+      if (jobErr) {
+        throw new Error(`Lỗi truy vấn scan_jobs: ${jobErr.message}`);
       }
+      if (!job) return null;
+
+      // Fetch scan_job_sources
+      const { data: jobSources, error: sourcesErr } = await supabase
+        .from('scan_job_sources')
+        .select('*')
+        .eq('scan_id', id);
+
+      if (sourcesErr) {
+        throw new Error(`Lỗi truy vấn scan_job_sources: ${sourcesErr.message}`);
+      }
+
+      // Fetch candidate audits
+      const { data: audits } = await supabase
+        .from('candidate_audits')
+        .select('*')
+        .eq('scan_id', id);
+
+      const sourceResults: SourceExecutionResult[] = (jobSources || []).map((js: any) => ({
+        bankId: js.bank_id,
+        bankName: js.bank_name || 'Ngân hàng',
+        sourceType: js.source_type,
+        status: js.status as any,
+        url: '',
+        httpStatus: js.http_status || (js.status === 'success' ? 200 : 0),
+        discoveredCount: js.pages_discovered || 0,
+        savedCount: js.items_found || 0,
+        errorCode: js.error_code,
+        errorMessage: js.error_message,
+      }));
+
+      const rejectedCandidates: CandidateAuditItem[] = (audits || []).map((ca: any) => ({
+        id: ca.id,
+        bankId: ca.bank_id,
+        bankName: ca.bank_name || '',
+        url: ca.url,
+        title: ca.title || '',
+        pageType: ca.page_type,
+        publishedAt: ca.published_at,
+        effectiveFrom: ca.effective_from,
+        effectiveTo: ca.effective_to,
+        audience: ca.audience || '',
+        httpStatus: 200,
+        accepted: ca.accepted,
+        rejectionReason: ca.rejection_reason,
+      }));
+
+      return {
+        id: job.id,
+        dateFrom: job.date_from,
+        dateTo: job.date_to,
+        selectedBanks: job.selected_banks || [],
+        sourceTypes: job.source_types || ['website'],
+        status: job.status as any,
+        progressPercent: job.progress_percent || 0,
+        currentStage: job.current_stage || '',
+        currentBankName: job.current_bank_name || '',
+        totalFound: job.total_found || 0,
+        createdAt: job.created_at,
+        finishedAt: job.finished_at,
+        metrics: job.metrics || {},
+        sourceResults,
+        rejectedCandidates,
+      };
     }
 
+    const inMemory = this.scanJobDetails.find((j) => j.id === id);
+    if (inMemory) return inMemory;
     return null;
   }
 

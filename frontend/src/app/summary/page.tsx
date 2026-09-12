@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Bank, IntelligenceItem, SourceAlert, ScanJobDetail, ScanMetrics, SourceExecutionResult } from '@/types';
+import { Bank, IntelligenceItem, SourceAlert, ScanJobDetail, ScanMetrics, SourceExecutionResult, CandidateAuditItem } from '@/types';
 import ScanSetupPanel from '@/components/summary/ScanSetupPanel';
 import SummaryStatCards from '@/components/summary/SummaryStatCards';
 import SourceAlertsBanner from '@/components/summary/SourceAlertsBanner';
@@ -47,6 +47,7 @@ export default function SummaryPage() {
 
   const [retryingAlertId, setRetryingAlertId] = useState<string | null>(null);
   const [lastScanReport, setLastScanReport] = useState<{
+    scanId?: string;
     metrics?: ScanMetrics;
     sourceResults?: SourceExecutionResult[];
     rejectedCandidates?: CandidateAuditItem[];
@@ -168,6 +169,7 @@ export default function SummaryPage() {
           currentBankName: '',
         });
         setLastScanReport({
+          scanId: completedJob.id,
           metrics: sourcePayload?.metrics || completedJob.metrics,
           sourceResults: sourcePayload?.sourceResults || completedJob.sourceResults,
           rejectedCandidates: sourcePayload?.rejectedCandidates || completedJob.rejectedCandidates,
@@ -254,6 +256,7 @@ export default function SummaryPage() {
               // Strict Scan Isolation: Keep items empty on failure
               setItems([]);
               setLastScanReport({
+                scanId: currentJob.id,
                 metrics: pollJson.metrics || currentJob.metrics,
                 sourceResults: pollJson.sourceResults || currentJob.sourceResults,
                 rejectedCandidates: pollJson.rejectedCandidates || currentJob.rejectedCandidates,
@@ -310,6 +313,8 @@ export default function SummaryPage() {
   // Export CSV handler
   const handleExportCsv = () => {
     const params = new URLSearchParams();
+    const effectiveScanId = activeScanId || lastScanReport?.scanId;
+    if (effectiveScanId) params.append('scan_id', effectiveScanId);
     if (dateFrom) params.append('date_from', dateFrom);
     if (dateTo) params.append('date_to', dateTo);
     if (selectedBankIds.length > 0 && selectedBankIds.length < banks.length) {

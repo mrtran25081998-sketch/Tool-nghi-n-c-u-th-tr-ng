@@ -1,5 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse, after } from 'next/server';
 import { store } from '@/lib/store';
+import { runScanWorker } from '@/lib/crawler/scanWorker';
 
 export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
@@ -54,6 +55,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Create scan_jobs and scan_job_sources with status queued
     const job = await store.createScanJobDetail({
       dateFrom: fromDate,
       dateTo: toDate,
@@ -61,14 +63,46 @@ export async function POST(req: NextRequest) {
       sourceTypes,
     });
 
-    // Execute pipeline so serverless function does not freeze background tasks
-    await store.runScanPipeline(job);
+    // If external FastAPI worker is configured, notify it
+    const backendWorkerUrl = process.env.BACKEND_WORKER_URL;
+    if (backendWorkerUrl) {
+      fetch(`${backendWorkerUrl.replace(/\/+$/, '')}/internal/process-job`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          job_id: job.id,
+          date_from: fromDate,
+          date_to: toDate,
+        }),
+      }).catch((e) => console.warn('FastAPI worker trigger failed:', e));
+    }
 
-    return NextResponse.json({
-      success: true,
-      scanId: job.id,
-      data: job,
-    }, { status: 201 });
+    // Run background worker asynchronously via Next.js after()
+    try {
+      after(async () => {
+        try {
+          await runScanWorker(job.id);
+        } catch (workerErr) {
+          console.error('[Worker Error]', workerErr);
+        }
+      });
+    } catch {
+      setImmediate(() => {
+        runScanWorker(job.id).catch((e) => console.error('[Worker setImmediate Error]', e));
+      });
+    }
+
+    // Return HTTP 202 immediately with scanId and status=queued
+    return NextResponse.json(
+      {
+        success: true,
+        scanId: job.id,
+        status: 'queued',
+        data: job,
+        message: 'Lượt quét đã được tạo và đưa vào hàng đợi',
+      },
+      { status: 202 }
+    );
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }

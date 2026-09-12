@@ -23,20 +23,35 @@ export interface Bank {
   updated_at?: string;
 }
 
-export interface SourcePair {
+export interface BankSource {
   id: string;
   org_id: string;
   bank_id: string;
   bank_name?: string;
-  facebook_url: string;
   website_url: string;
-  facebook_verified: boolean;
+  business_hub_url?: string;
+  news_urls?: string[];
+  promotion_urls?: string[];
+  sitemap_url?: string;
+  rss_url?: string;
+  allowed_domains?: string[];
+  render_mode?: 'raw' | 'browser' | 'auto';
+  adaptor_name?: string;
+  facebook_url: string;
+  facebook_page_id?: string;
+  enterprise_keywords?: string[];
+  exclusion_keywords?: string[];
   website_verified: boolean;
+  facebook_verified: boolean;
   is_active?: boolean;
   display_order: number;
+  last_scanned_at?: string;
   created_at?: string;
   updated_at?: string;
 }
+
+export type SourcePair = BankSource;
+
 
 
 export interface BenchmarkGroup {
@@ -446,7 +461,7 @@ export interface SourceAlert {
   resolved?: boolean;
 }
 
-export type PageType = 'landing' | 'category' | 'article' | 'product' | 'promotion' | 'invalid';
+export type PageType = 'landing' | 'category' | 'article' | 'product' | 'promotion' | 'unknown' | 'invalid';
 
 export type CandidateRejectionReason =
   | 'DATE_MISSING'

@@ -40,6 +40,23 @@ export interface WebCrawlResult {
   errorMessage?: string;
 }
 
+export interface BankCrawlConfig {
+  bankId: string;
+  bankName: string;
+  corporateHomepageUrl: string;
+  businessHubUrl?: string;
+  newsUrls?: string[];
+  promotionUrls?: string[];
+  sitemapUrl?: string;
+  rssUrl?: string;
+  allowedDomains?: string[];
+  renderMode?: 'raw' | 'browser' | 'auto';
+  adaptorName?: string;
+  dateFrom: string;
+  dateTo: string;
+  maxPages?: number;
+}
+
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
@@ -66,6 +83,9 @@ const CORPORATE_KEYWORDS = [
   'chuyển tiền quốc tế',
   'pos',
   'qr doanh nghiệp',
+  'ebank',
+  'biz',
+  'efast',
 ];
 
 const CORPORATE_NEWS_KEYWORDS = [
@@ -96,47 +116,25 @@ const CORPORATE_NEWS_KEYWORDS = [
 ];
 
 const EXCLUSION_KEYWORDS = [
-  // Explicit individual/personal product keywords
   'vay mua nhà cá nhân',
-  'thẻ tín dụng cá nhân',
-  'tài khoản thanh toán cá nhân',
-  'tiết kiệm cá nhân',
   'vay tiêu dùng cá nhân',
-  'vay tiêu dùng',
+  'thẻ tín dụng cá nhân',
+  'tiết kiệm cá nhân',
+  'bảo hiểm nhân thọ cá nhân',
   'khách hàng cá nhân',
-  'personal banking',
-  'retail banking',
-  'khcn',
-  // Non-business news / investor relations / PR / rankings
-  ...CORPORATE_NEWS_KEYWORDS,
-  // Personal promotions clearly not for business
-  'cuối tuần lộc',
-  'lộc lá',
-  'mb8888',
-  'hoàn tiền cá nhân',
-  'ưu đãi cuối tuần',
-  'mở quà trúng lớn',
-  'vòng quay may mắn',
-  // Credit cards / debit cards (personal)
-  'mastercard platinum',
-  'visa platinum',
-  'visa classic',
-  'jcb cá nhân',
-  'napas cá nhân',
-  'thẻ ghi nợ quốc tế mb',
-  'thẻ tín dụng quốc tế mb',
-  'thẻ tín dụng quốc tế',
+  'thông báo tuyển dụng',
+  'nộp hồ sơ ứng tuyển',
+  'cơ hội nghề nghiệp',
+  'tuyển dụng',
 ];
 
-// Clean HTML to pure text – also removes Angular/Vue/React template artifacts
-function stripHtml(html: string): string {
-  if (!html) return '';
+/**
+ * Strip HTML tags and entities
+ */
+export function stripHtml(html: string): string {
   return html
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, ' ')
     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, ' ')
-    .replace(/<nav\b[^<]*(?:(?!<\/nav>)<[^<]*)*<\/nav>/gi, ' ')
-    .replace(/<footer\b[^<]*(?:(?!<\/footer>)<[^<]*)*<\/footer>/gi, ' ')
-    .replace(/<header\b[^<]*(?:(?!<\/header>)<[^<]*)*<\/header>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
@@ -144,82 +142,44 @@ function stripHtml(html: string): string {
     .replace(/&#39;/g, "'")
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
-    // Remove Angular/AngularJS template expressions and directives (ng-repeat, ng-if, etc.)
-    .replace(/ng-[a-z-]+=\s*"[^"]*"/gi, ' ')
-    .replace(/ng-[a-z-]+=\s*'[^']*'/gi, ' ')
-    .replace(/\{\{[^}]*\}\}/g, ' ')  // Remove {{ expression }} interpolations
-    .replace(/\$index|\$scope|\$emit|emit-last-repeater/g, ' ')
-    .replace(/track by \S+/g, ' ')
-    .replace(/'[a-z]+':![^,)]+/g, ' ')  // Remove AngularJS object expressions like 'menu':!(link.x)
-    // Remove any remaining template-like leftover patterns
-    .replace(/,\s*'[a-z-]+':!?\([^)]+\)/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-// Normalize URL (strip fragments, tracking params, resolve relative)
-export function normalizeUrl(rawHref: string, baseUrl: string): string | null {
+/**
+ * Normalize and canonicalize URL
+ */
+export function normalizeUrl(rawUrl: string, baseUrl: string): string {
   try {
-    const parsed = new URL(rawHref, baseUrl);
-    if (!['http:', 'https:'].includes(parsed.protocol)) return null;
-
-    // Check file extensions to avoid binary assets
-    const pathname = parsed.pathname.toLowerCase();
-    if (/\.(pdf|jpg|jpeg|png|gif|svg|webp|css|js|woff2?|zip|rar|mp4|mp3|exe)$/.test(pathname)) {
-      return null;
-    }
-
-    // Ignore client-side template expression URLs (e.g. {{x.alias}})
-    if (pathname.includes('{{') || pathname.includes('%7b%7b')) {
-      return null;
-    }
-
-    // Strip tracking parameters
-    parsed.hash = '';
-    const trackingParams = ['fbclid', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'ref', 'gclid'];
+    const resolved = new URL(rawUrl, baseUrl);
+    resolved.hash = '';
+    // Strip common tracking query params
+    const trackingParams = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'fbclid', 'gclid', 'ref'];
     for (const p of trackingParams) {
-      parsed.searchParams.delete(p);
+      resolved.searchParams.delete(p);
     }
-
-    return parsed.toString();
+    return resolved.toString().replace(/\/+$/, '');
   } catch {
-    return null;
+    return rawUrl;
   }
 }
 
-// Fetch with timeout and retry
-async function fetchWithRetry(url: string, timeoutMs: number = 10000, retries: number = 1): Promise<{ ok: boolean; status: number; text: string }> {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const res = await fetch(url, {
-        signal: controller.signal,
-        headers: {
-          'User-Agent': USER_AGENT,
-          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
-          'Cache-Control': 'no-cache',
-        },
-      });
-      clearTimeout(timer);
-      const text = await res.text();
-      return { ok: res.ok, status: res.status, text };
-    } catch (err: any) {
-      clearTimeout(timer);
-      if (attempt === retries) {
-        return { ok: false, status: 0, text: '' };
-      }
-      // Brief pause before retry
-      await new Promise((r) => setTimeout(r, 400));
-    }
+/**
+ * Extract base registrable domain from a hostname
+ */
+export function getRegistrableDomain(hostname: string): string {
+  const parts = hostname.toLowerCase().split('.');
+  if (parts.length <= 2) return parts.join('.');
+  // Special handling for .com.vn, .edu.vn, .gov.vn, .org.vn
+  if (parts.length >= 3 && ['com', 'edu', 'gov', 'org', 'net'].includes(parts[parts.length - 2]) && parts[parts.length - 1] === 'vn') {
+    return parts.slice(-3).join('.');
   }
-  return { ok: false, status: 0, text: '' };
+  return parts.slice(-2).join('.');
 }
 
 /**
  * Detect structural page type
- * Landing & category pages must never become intelligence items
+ * Unknown page types must return 'unknown' (never default to 'article')
  */
 export function detectPageType(url: string, title: string, html: string): PageType {
   const urlLower = (url || '').toLowerCase().replace(/\/+$/, '');
@@ -312,12 +272,14 @@ export function detectPageType(url: string, title: string, html: string): PageTy
     return 'article';
   }
 
-  return 'article';
+  // Unknown page type: Must be unknown, not defaulted to article
+  return 'unknown';
 }
 
 /**
- * Extract publication date & promotion validity dates strictly
- * Separates publishedAt (actual publication date) from effectiveTo (promotion expiration)
+ * Extract dates strictly:
+ * Separates publishedAt (actual publication date) from effectiveFrom/effectiveTo (promotion duration)
+ * Never uses effectiveTo as publishedAt
  */
 export function extractPageDates(html: string, url?: string): {
   publishedAt: string | null;
@@ -389,7 +351,7 @@ export function extractPageDates(html: string, url?: string): {
     }
   }
 
-  // 4. URL path date regex (e.g. /the-tin-dung-...-2025-4-23-14-15-19 or /2026-05-08)
+  // 4. URL path date regex (e.g. /the-tin-dung-...-2025-4-23-14-15-19 or /2024-06-18)
   if (!publishedAt && url) {
     const urlDateMatch = url.match(/\b(202\d)[\/\-_]([0-1]?\d)[\/\-_]([0-3]?\d)\b/);
     if (urlDateMatch) {
@@ -405,10 +367,10 @@ export function extractPageDates(html: string, url?: string): {
     }
   }
 
-  // 5. Explicit "ngày đăng / đăng ngày / ngày phát hành" in HTML text
+  // 5. Explicit "ngày đăng / ngày đăng bài / đăng ngày / ngày phát hành" in HTML text
   if (!publishedAt) {
     const publishTextMatch = html.match(
-      /(?:ngày đăng|đăng ngày|ngày phát hành|xuất bản ngày|cập nhật ngày)\s*[:\-]?\s*([0-3]?\d)[\/\-\.]([0-1]?\d)[\/\-\.](202\d)/i
+      /(?:ngày đăng(?:\s+bài)?|đăng ngày|ngày phát hành|xuất bản ngày|cập nhật ngày)\s*[:\-]?\s*([0-3]?\d)[\/\-\.]([0-1]?\d)[\/\-\.](202\d)/i
     );
     if (publishTextMatch) {
       const day = publishTextMatch[1].padStart(2, '0');
@@ -425,6 +387,7 @@ export function extractPageDates(html: string, url?: string): {
 
   // 6. Promotion / Program validity dates (effectiveTo / effectiveFrom)
   // "Áp dụng đến 31/07/2026", "hiệu lực đến...", "thời hạn đến...", "hạn sử dụng đến...", "đến hết ngày 31/07/2026"
+  // Note: NEVER assign effectiveTo to publishedAt!
   const expiryMatch = html.match(
     /(?:áp dụng đến|hiệu lực đến|thời hạn đến|hạn sử dụng đến|đến hết ngày|hạn chót)\s*(?:ngày\s*)?([0-3]?\d)[\/\-\.]([0-1]?\d)[\/\-\.](202\d)/i
   );
@@ -461,7 +424,8 @@ export function extractPageDates(html: string, url?: string): {
     }
   }
 
-  const hasDate = Boolean(publishedAt || effectiveTo);
+  // hasDate is strictly whether publishedAt exists
+  const hasDate = Boolean(publishedAt);
   return { publishedAt, effectiveFrom, effectiveTo, dateSource, hasDate };
 }
 
@@ -471,21 +435,26 @@ export function extractPublishedDate(html: string, url?: string): { date: string
   return { date: res.publishedAt, source: res.dateSource };
 }
 
-// Evaluate audience: corporate vs retail vs PR/corporate news
+/**
+ * Evaluate whether an article is for Corporate / SME customers vs Personal
+ */
 export function evaluateAudience(
   title: string,
-  desc: string,
+  description: string,
   content: string,
-  url: string
-): { isCorporate: boolean; audience: string; reason: string; rejectionReason?: CandidateRejectionReason } {
-  const normalizedTitle = title.trim();
-  const normalizedText = `${url} ${title} ${desc} ${content}`
-    .toLowerCase()
-    .replace(/[’‘`]/g, "'")
-    .replace(/[“”]/g, '"');
-  const urlLower = url.toLowerCase();
+  url: string = ''
+): {
+  isCorporate: boolean;
+  audience: string;
+  reason: string;
+  rejectionReason?: CandidateRejectionReason;
+} {
+  const combinedText = `${title} ${description} ${content}`.toLowerCase();
+  const normalizedText = combinedText.replace(/[’‘`]/g, "'").replace(/[“”]/g, '"');
+  const normalizedTitle = (title || '').toLowerCase().trim();
+  const urlLower = (url || '').toLowerCase();
 
-  // Exclude generic bank homepages / portal titles
+  // Root / generic homepage title exclusion
   const isGenericTitle =
     /^(mb\s*bank|mbbank|techcombank|vietinbank|bidv|vietcombank|vpbank|acb|sacombank|hdbank|tpbank|seabank|ocb|msb|agribank|lienvietpostbank|shb)(\s*[|–-].*)?$/i.test(normalizedTitle) ||
     /^(mb\s*ngân hàng quân đội|ngân hàng quân đội)(\s*[|–-].*)?$/i.test(normalizedTitle);
@@ -525,7 +494,7 @@ export function evaluateAudience(
       return {
         isCorporate: false,
         audience: 'Cá nhân / Thông tin chung',
-        reason: `URL path chứa dấu hiệu trang cá nhân / thông tin nội bộ: "${pat}"`,
+        reason: `Chứa từ khóa/dấu hiệu loại trừ sản phẩm cá nhân: "${pat}"`,
         rejectionReason: 'PERSONAL_CONTENT',
       };
     }
@@ -551,87 +520,106 @@ export function evaluateAudience(
       return {
         isCorporate: false,
         audience: 'Cá nhân / Tiêu dùng',
-        reason: `Chứa từ khóa sản phẩm cá nhân: "${exc}"`,
+        reason: `Chứa từ khóa loại trừ sản phẩm cá nhân: "${exc}"`,
         rejectionReason: 'PERSONAL_CONTENT',
       };
     }
   }
 
   // Check positive corporate keywords
-  const matchedKeywords: string[] = [];
+  const matchedCorporate: string[] = [];
   for (const kw of CORPORATE_KEYWORDS) {
     if (normalizedText.includes(kw)) {
-      matchedKeywords.push(kw);
+      matchedCorporate.push(kw);
     }
   }
 
-  if (matchedKeywords.length > 0) {
+  if (matchedCorporate.length > 0) {
+    const displayAudience = matchedCorporate.some((k) => k.includes('sme') || k.includes('vừa và nhỏ'))
+      ? 'Doanh nghiệp / SME'
+      : matchedCorporate.some((k) => k.includes('corporate') || k.includes('tổ chức') || k.includes('cib'))
+      ? 'Doanh nghiệp lớn / Corporate'
+      : 'Khách hàng Doanh nghiệp';
+
     return {
       isCorporate: true,
-      audience: 'Doanh nghiệp / SME',
-      reason: `Khớp ${matchedKeywords.length} từ khóa KHDN (${matchedKeywords.slice(0, 3).join(', ')})`,
+      audience: displayAudience,
+      reason: `Khớp ${matchedCorporate.length} từ khóa sản phẩm KHDN: ${matchedCorporate.slice(0, 3).join(', ')}`,
     };
   }
 
   return {
     isCorporate: false,
-    audience: 'Chung / Chưa xác định',
-    reason: 'Không tìm thấy từ khóa nhận diện KHDN/SME đặc thù',
+    audience: 'Chung / Không rõ phân khúc',
+    reason: 'Không tìm thấy dấu hiệu sản phẩm hoặc chương trình dành cho KHDN',
     rejectionReason: 'PERSONAL_CONTENT',
   };
 }
 
-// Classify banking product category
+/**
+ * Detect product / feature category
+ */
 export function detectCategory(text: string): string {
   const t = text.toLowerCase();
-  if (t.includes('tài trợ thương mại') || t.includes('lc') || t.includes('nhờ thu') || t.includes('bảo lãnh')) {
-    return 'Tài trợ thương mại';
+  if (t.includes('tài khoản') || t.includes('số đẹp') || t.includes('gói tài khoản')) {
+    return 'Tài khoản & Dịch vụ';
   }
-  if (t.includes('tín dụng') || t.includes('vay') || t.includes('thấu chi') || t.includes('hạn mức')) {
-    return 'Tín dụng và khoản vay';
+  if (t.includes('ngân hàng số') || t.includes('ebank') || t.includes('app') || t.includes('portal') || t.includes('biz')) {
+    return 'Ngân hàng số & Nền tảng';
   }
-  if (t.includes('quản lý dòng tiền') || t.includes('thu hộ') || t.includes('chi hộ')) {
-    return 'Quản lý dòng tiền';
+  if (t.includes('tín dụng') || t.includes('vay') || t.includes('hạn mức') || t.includes('thấu chi')) {
+    return 'Tín dụng & Cho vay';
   }
-  if (t.includes('pos') || t.includes('qr') || t.includes('cổng thanh toán')) {
-    return 'POS/QR';
+  if (t.includes('thanh toán') || t.includes('thu hộ') || t.includes('chi hộ') || t.includes('qr') || t.includes('pos')) {
+    return 'Thanh toán & Thu chi hộ';
   }
-  if (t.includes('chuyển tiền quốc tế') || t.includes('ngoại tệ') || t.includes('fx')) {
-    return 'Chuyển tiền quốc tế';
+  if (t.includes('tài trợ thương mại') || t.includes('bảo lãnh') || t.includes('lc') || t.includes('nhập khẩu') || t.includes('xuất khẩu')) {
+    return 'Tài trợ thương mại & Bảo lãnh';
   }
-  if (t.includes('thẻ doanh nghiệp') || t.includes('thẻ tín dụng doanh nghiệp')) {
-    return 'Thẻ doanh nghiệp';
+  if (t.includes('tiền gửi') || t.includes('tiết kiệm') || t.includes('sinh lời')) {
+    return 'Tiền gửi & Quản lý dòng tiền';
   }
-  if (t.includes('tiền gửi') || t.includes('tiết kiệm doanh nghiệp') || t.includes('chứng chỉ tiền gửi')) {
-    return 'Tiền gửi & Đầu tư';
+  if (t.includes('ưu đãi') || t.includes('khuyến mại') || t.includes('hoàn tiền') || t.includes('giảm phí') || t.includes('miễn phí')) {
+    return 'Chương trình & Ưu đãi';
   }
-  if (t.includes('ngân hàng số') || t.includes('ebank') || t.includes('app') || t.includes('portal')) {
-    return 'Ngân hàng số B2B';
-  }
-  return 'Tài khoản doanh nghiệp';
+  return 'Sản phẩm Doanh nghiệp';
 }
 
-// Discover article URLs from page HTML, including CTA buttons & cards
-export function discoverArticleLinks(html: string, baseUrl: string, maxLinks: number = 10): string[] {
+/**
+ * Discover candidate article links from HTML page
+ * Do NOT drop ebank URLs (essential corporate digital banking content)
+ * Allow subdomains within the same registrable domain
+ */
+export function discoverArticleLinks(html: string, baseUrl: string, maxLinks: number = 15): string[] {
   const links: string[] = [];
-  const baseObj = new URL(baseUrl);
-  const baseHost = baseObj.hostname;
-
-  // Regex matching href attributes
-  const hrefRegex = /<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
-  let match;
   const seen = new Set<string>();
+  const baseObj = new URL(baseUrl);
+  const baseDomain = getRegistrableDomain(baseObj.hostname);
+
+  const hrefRegex = /<a\b[^>]*href=["']([^"'#]+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let match;
 
   while ((match = hrefRegex.exec(html)) !== null) {
-    const rawHref = match[1];
-    const linkText = stripHtml(match[2]).toLowerCase();
-    const normalized = normalizeUrl(rawHref, baseUrl);
-    if (!normalized || seen.has(normalized)) continue;
+    const rawHref = match[1].trim();
+    const linkText = stripHtml(match[2] || '').toLowerCase();
 
-    // Must be same host domain or bank corporate subdomain
+    if (!rawHref || rawHref.startsWith('javascript:') || rawHref.startsWith('mailto:') || rawHref.startsWith('tel:')) {
+      continue;
+    }
+
+    // Exclude static assets and binaries
+    if (/\.(pdf|docx?|xlsx?|pptx?|zip|rar|png|jpe?g|gif|svg|webp|css|js)$/i.test(rawHref)) {
+      continue;
+    }
+
+    const normalized = normalizeUrl(rawHref, baseUrl);
+    if (seen.has(normalized)) continue;
+
+    // Must be same registrable domain or official subdomain
     try {
       const parsed = new URL(normalized);
-      if (!parsed.hostname.endsWith(baseHost.replace(/^www\./, ''))) {
+      const parsedDomain = getRegistrableDomain(parsed.hostname);
+      if (parsedDomain !== baseDomain) {
         continue;
       }
 
@@ -658,8 +646,8 @@ export function discoverArticleLinks(html: string, baseUrl: string, maxLinks: nu
         path.includes('login') ||
         path.includes('dang-nhap') ||
         path.includes('auth') ||
-        path.includes('ebank') ||
-        // Explicitly exclude personal banking paths
+        // NOTE: Do NOT exclude 'ebank'! ebank is corporate digital banking.
+        // Explicitly exclude personal banking paths only
         path.includes('/khach-hang-ca-nhan') ||
         path.includes('/ca-nhan/') ||
         path.includes('/the-ca-nhan') ||
@@ -682,7 +670,7 @@ export function discoverArticleLinks(html: string, baseUrl: string, maxLinks: nu
 
       const hasCorporateSignal =
         CORPORATE_KEYWORDS.some((kw) => combined.includes(kw)) ||
-        /\/(chi-tiet|tin-tuc|san-pham|giai-phap|dich-vu|uu-dai|khuyen-mai|khcn-dn|corporate|business|sme|smb|enterprise)\//i.test(path);
+        /\/(chi-tiet|tin-tuc|san-pham|giai-phap|dich-vu|uu-dai|khuyen-mai|khcn-dn|corporate|business|sme|smb|enterprise|ebank|biz)\//i.test(path);
 
       if (hasCorporateSignal || hasCtaSignal) {
         seen.add(normalized);
@@ -696,21 +684,129 @@ export function discoverArticleLinks(html: string, baseUrl: string, maxLinks: nu
 }
 
 /**
- * Main Web Crawler execution for a single Bank
+ * Helper to fetch with timeout and retry
  */
-export async function crawlBankWebsite(params: {
+async function fetchWithRetry(
+  url: string,
+  timeoutMs: number = 12000,
+  maxRetries: number = 1
+): Promise<{ ok: boolean; status: number; text: string }> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+      const res = await fetch(url, {
+        headers: {
+          'User-Agent': USER_AGENT,
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+        },
+        signal: controller.signal,
+      });
+
+      clearTimeout(timer);
+      const text = await res.text();
+      return { ok: res.ok, status: res.status, text };
+    } catch (err: any) {
+      if (attempt === maxRetries) {
+        return { ok: false, status: 0, text: '' };
+      }
+      await new Promise((r) => setTimeout(r, 600));
+    }
+  }
+  return { ok: false, status: 0, text: '' };
+}
+
+/**
+ * Bank-Specific Adapters
+ */
+export interface BankCrawlerAdapter {
+  name: string;
+  extractCandidateUrls: (html: string, baseUrl: string) => string[];
+  cleanArticleDetails?: (url: string, title: string, html: string) => { title?: string; content?: string };
+}
+
+export const BANK_ADAPTERS: Record<string, BankCrawlerAdapter> = {
+  mb: {
+    name: 'MBBank Adapter',
+    extractCandidateUrls: (html, baseUrl) => {
+      const links = discoverArticleLinks(html, baseUrl, 20);
+      return links.filter((l) => l.includes('mbbank.com.vn'));
+    },
+  },
+  techcombank: {
+    name: 'Techcombank Adapter',
+    extractCandidateUrls: (html, baseUrl) => {
+      const links = discoverArticleLinks(html, baseUrl, 20);
+      return links.filter((l) => l.includes('techcombank.com'));
+    },
+  },
+  bidv: {
+    name: 'BIDV Adapter',
+    extractCandidateUrls: (html, baseUrl) => {
+      const links = discoverArticleLinks(html, baseUrl, 20);
+      return links.filter((l) => l.includes('bidv.com.vn'));
+    },
+  },
+  vietcombank: {
+    name: 'Vietcombank Adapter',
+    extractCandidateUrls: (html, baseUrl) => {
+      const links = discoverArticleLinks(html, baseUrl, 20);
+      return links.filter((l) => l.includes('vietcombank.com.vn'));
+    },
+  },
+  vietinbank: {
+    name: 'VietinBank Adapter',
+    extractCandidateUrls: (html, baseUrl) => {
+      const links = discoverArticleLinks(html, baseUrl, 20);
+      return links.filter((l) => l.includes('vietinbank.vn'));
+    },
+  },
+  generic: {
+    name: 'Generic Bank Adapter',
+    extractCandidateUrls: (html, baseUrl) => discoverArticleLinks(html, baseUrl, 20),
+  },
+};
+
+/**
+ * Main Bank Website Crawler
+ */
+export async function crawlBankWebsite(config: {
   bankId: string;
   bankName: string;
   corporateHomepageUrl: string;
+  businessHubUrl?: string;
+  newsUrls?: string[];
+  promotionUrls?: string[];
+  sitemapUrl?: string;
+  rssUrl?: string;
+  allowedDomains?: string[];
+  renderMode?: 'raw' | 'browser' | 'auto';
+  adaptorName?: string;
   dateFrom: string;
   dateTo: string;
   maxPages?: number;
 }): Promise<WebCrawlResult> {
-  const { corporateHomepageUrl, dateFrom, dateTo, maxPages = 6 } = params;
+  const {
+    bankId,
+    bankName,
+    corporateHomepageUrl,
+    businessHubUrl,
+    newsUrls = [],
+    promotionUrls = [],
+    sitemapUrl,
+    dateFrom,
+    dateTo,
+    maxPages = 8,
+    adaptorName = 'generic',
+  } = config;
 
-  if (!corporateHomepageUrl || !corporateHomepageUrl.startsWith('http')) {
+  const targetUrl = businessHubUrl || corporateHomepageUrl;
+
+  if (!targetUrl || !targetUrl.startsWith('http')) {
     return {
-      sourceUrl: corporateHomepageUrl || '',
+      sourceUrl: targetUrl || '',
       httpStatus: 0,
       status: 'failed',
       pagesDiscovered: 0,
@@ -726,24 +822,27 @@ export async function crawlBankWebsite(params: {
     };
   }
 
-  console.log(`[Crawler] 🌐 Starting crawl for ${params.bankName} at: ${corporateHomepageUrl}`);
+  console.log(`[Crawler] 🌐 Starting crawl for ${bankName} at: ${targetUrl}`);
 
   const candidateAudit: CandidateAuditItem[] = [];
   const articles: CrawledArticle[] = [];
   const visitedUrls = new Set<string>();
 
-  // Step 1: Fetch corporate homepage / root seed
-  const rootFetch = await fetchWithRetry(corporateHomepageUrl, 12000, 1);
-  visitedUrls.add(corporateHomepageUrl.replace(/\/+$/, '').toLowerCase());
+  // Select adapter
+  const adapter = BANK_ADAPTERS[adaptorName] || BANK_ADAPTERS.generic;
+
+  // Step 1: Fetch root homepage / hub
+  const rootFetch = await fetchWithRetry(targetUrl, 14000, 1);
+  visitedUrls.add(targetUrl.replace(/\/+$/, '').toLowerCase());
 
   if (!rootFetch.ok || !rootFetch.text) {
     const errCode = rootFetch.status === 403 ? 'HTTP_403' : rootFetch.status === 404 ? 'HTTP_404' : 'FETCH_TIMEOUT';
     candidateAudit.push({
       id: crypto.randomUUID(),
-      bankId: params.bankId,
-      bankName: params.bankName,
-      url: corporateHomepageUrl,
-      title: `${params.bankName} - Trang chủ KHDN`,
+      bankId,
+      bankName,
+      url: targetUrl,
+      title: `${bankName} - Cổng Doanh Nghiệp`,
       pageType: 'landing',
       publishedAt: null,
       audience: 'Không thể truy cập',
@@ -753,7 +852,7 @@ export async function crawlBankWebsite(params: {
     });
 
     return {
-      sourceUrl: corporateHomepageUrl,
+      sourceUrl: targetUrl,
       httpStatus: rootFetch.status,
       status: 'failed',
       pagesDiscovered: 0,
@@ -765,21 +864,21 @@ export async function crawlBankWebsite(params: {
       articles: [],
       candidateAudit,
       errorCode: errCode,
-      errorMessage: `Không thể truy cập trang nguồn ${corporateHomepageUrl} (HTTP ${rootFetch.status || 'timeout'})`,
+      errorMessage: `Không thể truy cập trang nguồn ${targetUrl} (HTTP ${rootFetch.status || 'timeout'})`,
     };
   }
 
   // Audit root homepage as landing page (never an article item!)
   const rootTitleMatch = rootFetch.text.match(/<title\b[^>]*>([^<]+)<\/title>/i);
-  const rootTitle = (rootTitleMatch?.[1] || `${params.bankName} - KHDN`).trim();
-  const rootType = detectPageType(corporateHomepageUrl, rootTitle, rootFetch.text);
-  const rootDates = extractPageDates(rootFetch.text, corporateHomepageUrl);
+  const rootTitle = (rootTitleMatch?.[1] || `${bankName} - KHDN`).trim();
+  const rootType = detectPageType(targetUrl, rootTitle, rootFetch.text);
+  const rootDates = extractPageDates(rootFetch.text, targetUrl);
 
   candidateAudit.push({
     id: crypto.randomUUID(),
-    bankId: params.bankId,
-    bankName: params.bankName,
-    url: corporateHomepageUrl,
+    bankId,
+    bankName,
+    url: targetUrl,
     title: rootTitle,
     pageType: rootType === 'invalid' ? 'landing' : rootType,
     publishedAt: rootDates.publishedAt,
@@ -792,32 +891,50 @@ export async function crawlBankWebsite(params: {
     rejectionReason: 'LANDING_PAGE',
   });
 
-  // Step 2: Discover candidate detail article links
-  const discoveredLinks = discoverArticleLinks(rootFetch.text, corporateHomepageUrl, maxPages * 3);
-  const normalizedRoot = corporateHomepageUrl.replace(/\/+$/, '').toLowerCase();
-  const queue = discoveredLinks
+  // Step 2: Discover candidate links from root + configured news/promo pages
+  const discoveryQueue: string[] = [];
+  const initialLinks = adapter.extractCandidateUrls(rootFetch.text, targetUrl);
+  discoveryQueue.push(...initialLinks);
+
+  // Also discover from configured news_urls and promotion_urls
+  const auxSeeds = [...newsUrls, ...promotionUrls].filter((u) => u && u.startsWith('http'));
+  for (const seed of auxSeeds.slice(0, 3)) {
+    const normSeed = seed.replace(/\/+$/, '').toLowerCase();
+    if (visitedUrls.has(normSeed)) continue;
+    visitedUrls.add(normSeed);
+
+    const auxFetch = await fetchWithRetry(seed, 10000, 1);
+    if (auxFetch.ok && auxFetch.text) {
+      const auxLinks = adapter.extractCandidateUrls(auxFetch.text, seed);
+      discoveryQueue.push(...auxLinks);
+    }
+  }
+
+  // Deduplicate candidate queue
+  const normalizedRoot = targetUrl.replace(/\/+$/, '').toLowerCase();
+  const queue = Array.from(new Set(discoveryQueue))
     .filter((u) => u.replace(/\/+$/, '').toLowerCase() !== normalizedRoot)
     .slice(0, maxPages);
 
-  let pagesFetched = 1; // root is already fetched
+  let pagesFetched = 1;
   let itemsParsed = 0;
   let itemsRejectedByDate = 0;
   let itemsRejectedByAudience = 0;
   let itemsMissingDate = 0;
 
-  for (let i = 0; i < queue.length; i++) {
-    const url = queue[i];
+  // Step 3: Fetch detail pages
+  for (const url of queue) {
     const normUrl = url.replace(/\/+$/, '').toLowerCase();
     if (visitedUrls.has(normUrl)) continue;
     visitedUrls.add(normUrl);
 
-    const childFetch = await fetchWithRetry(url, 10000, 1);
     pagesFetched++;
+    const childFetch = await fetchWithRetry(url, 10000, 1);
     if (!childFetch.ok || !childFetch.text) {
       candidateAudit.push({
         id: crypto.randomUUID(),
-        bankId: params.bankId,
-        bankName: params.bankName,
+        bankId,
+        bankName,
         url,
         title: 'Lỗi tải trang',
         pageType: 'invalid',
@@ -829,14 +946,10 @@ export async function crawlBankWebsite(params: {
       });
       continue;
     }
+
     const html = childFetch.text;
-
-    // Extract basic metadata
     const titleMatch = html.match(/<title\b[^>]*>([^<]+)<\/title>/i);
-    const ogTitleMatch = html.match(/<meta\b[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i);
-    const rawTitle = (ogTitleMatch?.[1] || titleMatch?.[1] || '').trim();
-
-    // Clean title: remove site name suffix
+    const rawTitle = (titleMatch?.[1] || '').trim();
     const title =
       rawTitle.replace(
         /\s*[|–-]\s*(MB\s*Bank|MBBank|Techcombank|Vietinbank|BIDV|Vietcombank|VPBank|ACB|Sacombank|HDBank|TPBank|SeABank|OCB|MSB|Agribank|LienVietPostBank|SHB)[^|]*/gi,
@@ -849,25 +962,19 @@ export async function crawlBankWebsite(params: {
     const description = (descMatch?.[1] || '').trim();
     const cleanText = stripHtml(html).slice(0, 4000);
 
-    // Detect structural page type
     const pageType = detectPageType(url, title, html);
-
-    // Extract Dates strictly: separate publishedAt from effectiveTo
     const dates = extractPageDates(html, url);
-
-    // Evaluate Audience
     const audienceEval = evaluateAudience(title, description, cleanText, url);
     const category = detectCategory(`${title} ${description} ${cleanText}`);
 
     itemsParsed++;
 
-    // Prepare candidate audit entry
     const auditItem: CandidateAuditItem = {
       id: crypto.randomUUID(),
-      bankId: params.bankId,
-      bankName: params.bankName,
+      bankId,
+      bankName,
       url,
-      title: title || `${params.bankName} - Trang chi tiết`,
+      title: title || `${bankName} - Trang chi tiết`,
       pageType,
       publishedAt: dates.publishedAt,
       effectiveFrom: dates.effectiveFrom,
@@ -879,21 +986,10 @@ export async function crawlBankWebsite(params: {
       rejectionReason: null,
     };
 
-    // 1. Landing & Category check: Must NEVER enter intelligence items!
+    // 1. Landing & Category check: Must NEVER enter results!
     if (pageType === 'landing') {
       auditItem.rejectionReason = 'LANDING_PAGE';
       candidateAudit.push(auditItem);
-
-      // Deep dive: extract child CTA links from this landing hub if queue has room
-      if (queue.length < maxPages + 4) {
-        const subLinks = discoverArticleLinks(html, url, 4);
-        for (const s of subLinks) {
-          const normSub = s.replace(/\/+$/, '').toLowerCase();
-          if (!visitedUrls.has(normSub) && !queue.includes(s)) {
-            queue.push(s);
-          }
-        }
-      }
       continue;
     }
 
@@ -918,8 +1014,9 @@ export async function crawlBankWebsite(params: {
       continue;
     }
 
-    // 4. Date validity check
-    if (!dates.hasDate || (!dates.publishedAt && !dates.effectiveTo)) {
+    // 4. Date validity check: publishedAt is REQUIRED for verified articles
+    // If publishedAt is missing, candidate goes to DATE_MISSING and is NOT accepted
+    if (!dates.publishedAt) {
       itemsMissingDate++;
       itemsRejectedByDate++;
       auditItem.rejectionReason = 'DATE_MISSING';
@@ -927,15 +1024,12 @@ export async function crawlBankWebsite(params: {
       continue;
     }
 
-    // 5. Date range boundary check
-    const evalDate = dates.publishedAt || dates.effectiveTo;
-    if (evalDate) {
-      if (evalDate < dateFrom || evalDate > dateTo) {
-        itemsRejectedByDate++;
-        auditItem.rejectionReason = 'DATE_OUT_OF_RANGE';
-        candidateAudit.push(auditItem);
-        continue;
-      }
+    // 5. Date range boundary check: ONLY by publishedAt
+    if (dates.publishedAt < dateFrom || dates.publishedAt > dateTo) {
+      itemsRejectedByDate++;
+      auditItem.rejectionReason = 'DATE_OUT_OF_RANGE';
+      candidateAudit.push(auditItem);
+      continue;
     }
 
     // All criteria passed: Candidate is verified and accepted!
@@ -945,7 +1039,7 @@ export async function crawlBankWebsite(params: {
 
     articles.push({
       url,
-      title: title || `${params.bankName} - Dịch vụ khách hàng doanh nghiệp`,
+      title: title || `${bankName} - Dịch vụ khách hàng doanh nghiệp`,
       description: description || cleanText.slice(0, 250),
       content: cleanText.slice(0, 1500),
       publishedAt: dates.publishedAt,
@@ -958,14 +1052,14 @@ export async function crawlBankWebsite(params: {
       isCorporate: true,
       audienceReason: audienceEval.reason,
       verificationStatus: 'verified',
-      confidenceScore: dates.publishedAt ? 0.98 : 0.88,
+      confidenceScore: 0.98,
     });
   }
 
   const status = articles.length > 0 ? 'success' : 'partial';
 
   return {
-    sourceUrl: corporateHomepageUrl,
+    sourceUrl: targetUrl,
     httpStatus: rootFetch.status,
     status,
     pagesDiscovered: candidateAudit.length,
@@ -978,4 +1072,3 @@ export async function crawlBankWebsite(params: {
     candidateAudit,
   };
 }
-
