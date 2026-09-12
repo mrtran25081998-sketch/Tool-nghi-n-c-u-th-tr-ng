@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { store } from '@/lib/store';
 
+export const maxDuration = 60;
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const jobs = await store.getCrawlJobs();
@@ -57,6 +60,9 @@ export async function POST(req: NextRequest) {
       selectedBanks: validBankIds,
       sourceTypes,
     });
+
+    // Execute pipeline so serverless function does not freeze background tasks
+    await store.runScanPipeline(job);
 
     return NextResponse.json({
       success: true,
