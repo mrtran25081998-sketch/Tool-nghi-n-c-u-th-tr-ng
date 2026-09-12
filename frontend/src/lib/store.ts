@@ -915,17 +915,22 @@ class Store {
             };
           });
 
-          const uniqueByHash = new Map();
+          // Deduplicate within THIS scan only (same URL cannot appear twice in one scan)
+          const uniqueByJobHash = new Map<string, typeof insertPayload[0]>();
           for (const row of insertPayload) {
-            uniqueByHash.set(row.content_hash, row);
+            uniqueByJobHash.set(`${row.job_id}::${row.content_hash}`, row);
           }
-          const dedupedInsert = Array.from(uniqueByHash.values());
+          const dedupedInsert = Array.from(uniqueByJobHash.values());
 
-          await supabase.from('crawl_items').upsert(dedupedInsert, {
-            onConflict: 'org_id,bank_id,source_type,content_hash',
-          });
+          // INSERT (not upsert): each scan's articles are independent rows with their own job_id.
+          // Upsert on content_hash was silently keeping old job_id from previous scans,
+          // causing new scans to return 0 items when querying by the new job_id.
+          const { error: insertErr } = await supabase.from('crawl_items').insert(dedupedInsert);
+          if (insertErr) {
+            console.warn('crawl_items insert warning:', insertErr.message, insertErr.code);
+          }
         } catch (e) {
-          console.warn('Supabase crawl_items upsert warning:', e);
+          console.warn('Supabase crawl_items insert error:', e);
         }
       }
     });
