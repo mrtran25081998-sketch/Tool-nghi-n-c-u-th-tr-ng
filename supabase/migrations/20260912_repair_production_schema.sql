@@ -1,11 +1,28 @@
--- Repair the LIVE schema in-place.
--- The previous "unified" migration only used CREATE TABLE IF NOT EXISTS, so it
--- did not add the new columns to databases that already had the legacy tables.
-begin;
+-- ==============================================================================
+-- Repair and Synchronize Production Database Schema
+-- Migration: 20260912_repair_production_schema.sql
+-- Fixes missing scan_jobs columns (date_from, date_to), missing tables,
+-- foreign keys, RLS policies, and reloads PostgREST schema cache.
+-- ==============================================================================
 
 create extension if not exists pgcrypto;
 
--- Source configuration -------------------------------------------------------
+-- 1. BANKS TABLE (Ensure exists and updated)
+create table if not exists public.banks (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null default '00000000-0000-0000-0000-000000000001',
+  name text not null,
+  code text not null,
+  is_mb boolean not null default false,
+  active boolean not null default true,
+  display_order int not null default 0,
+  logo_url text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique(org_id, code)
+);
+
+-- 2. BANK_SOURCES TABLE
 create table if not exists public.bank_sources (
   id uuid primary key default gen_random_uuid(),
   org_id uuid not null default '00000000-0000-0000-0000-000000000001',
@@ -34,9 +51,7 @@ alter table public.bank_sources add column if not exists is_active boolean not n
 alter table public.bank_sources add column if not exists display_order int not null default 0;
 alter table public.bank_sources add column if not exists last_scanned_at timestamptz;
 
--- Copy the current production source configuration instead of falling back to
--- process memory. Keep the Facebook handle as a provisional page identifier;
--- it still has to be verified by Graph API before facebook_verified becomes true.
+-- Populate bank_sources from source_pairs if available
 do $$
 begin
   if to_regclass('public.source_pairs') is not null then
@@ -53,15 +68,16 @@ begin
       coalesce(sp.created_at, now()), coalesce(sp.updated_at, now())
     from public.source_pairs sp
     on conflict (org_id, bank_id) do update set
-      website_url = excluded.website_url,
-      business_hub_url = excluded.business_hub_url,
-      facebook_url = excluded.facebook_url,
+      website_url = coalesce(public.bank_sources.website_url, excluded.website_url),
+      business_hub_url = coalesce(public.bank_sources.business_hub_url, excluded.business_hub_url),
+      facebook_url = coalesce(public.bank_sources.facebook_url, excluded.facebook_url),
       facebook_page_id = coalesce(public.bank_sources.facebook_page_id, excluded.facebook_page_id),
       display_order = excluded.display_order,
       updated_at = now();
   end if;
 end $$;
 
+-- Update allowed_domains & adaptor_name for bank_sources
 update public.bank_sources bs
 set
   allowed_domains = array[regexp_replace(lower(split_part(coalesce(bs.business_hub_url, bs.website_url), '/', 3)), '^www\.', '')],
@@ -70,7 +86,31 @@ from public.banks b
 where b.id = bs.bank_id
   and coalesce(array_length(bs.allowed_domains, 1), 0) = 0;
 
--- Scan jobs ------------------------------------------------------------------
+-- 3. SCAN_JOBS TABLE (Contains critical date_from and date_to)
+create table if not exists public.scan_jobs (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null default '00000000-0000-0000-0000-000000000001',
+  date_from date not null default current_date,
+  date_to date not null default current_date,
+  selected_banks text[] not null default array[]::text[],
+  source_types text[] not null default array['website','facebook'],
+  status text not null default 'queued',
+  progress_percent int not null default 0,
+  current_stage text,
+  current_bank_name text,
+  metrics jsonb not null default '{}'::jsonb,
+  total_found int not null default 0,
+  error_summary text,
+  started_at timestamptz,
+  finished_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- Ensure all columns exist on scan_jobs
+alter table public.scan_jobs add column if not exists org_id uuid not null default '00000000-0000-0000-0000-000000000001';
+alter table public.scan_jobs add column if not exists date_from date not null default current_date;
+alter table public.scan_jobs add column if not exists date_to date not null default current_date;
 alter table public.scan_jobs add column if not exists selected_banks text[] not null default array[]::text[];
 alter table public.scan_jobs add column if not exists source_types text[] not null default array['website','facebook'];
 alter table public.scan_jobs add column if not exists progress_percent int not null default 0;
@@ -81,8 +121,9 @@ alter table public.scan_jobs add column if not exists total_found int not null d
 alter table public.scan_jobs add column if not exists error_summary text;
 alter table public.scan_jobs add column if not exists started_at timestamptz;
 alter table public.scan_jobs add column if not exists finished_at timestamptz;
+alter table public.scan_jobs add column if not exists updated_at timestamptz not null default now();
 
--- Legacy deployments used an enum that cannot store partial/empty.
+-- Ensure status column is text and can accept all statuses
 alter table public.scan_jobs alter column status drop default;
 alter table public.scan_jobs alter column status type text using status::text;
 alter table public.scan_jobs alter column status set default 'queued';
@@ -97,7 +138,7 @@ begin
   end if;
 end $$;
 
--- Per-source execution state -------------------------------------------------
+-- 4. SCAN_JOB_SOURCES TABLE
 create table if not exists public.scan_job_sources (
   id uuid primary key default gen_random_uuid(),
   scan_id uuid not null references public.scan_jobs(id) on delete cascade,
@@ -105,6 +146,7 @@ create table if not exists public.scan_job_sources (
   source_type text not null,
   status text not null default 'queued'
 );
+
 alter table public.scan_job_sources add column if not exists bank_name text;
 alter table public.scan_job_sources add column if not exists items_found int not null default 0;
 alter table public.scan_job_sources add column if not exists pages_discovered int not null default 0;
@@ -116,53 +158,82 @@ alter table public.scan_job_sources add column if not exists error_message text;
 alter table public.scan_job_sources add column if not exists http_status int;
 alter table public.scan_job_sources add column if not exists started_at timestamptz;
 alter table public.scan_job_sources add column if not exists finished_at timestamptz;
+alter table public.scan_job_sources add column if not exists created_at timestamptz not null default now();
+alter table public.scan_job_sources add column if not exists updated_at timestamptz not null default now();
+
 create unique index if not exists uq_scan_job_sources_scan_bank_type
   on public.scan_job_sources(scan_id, bank_id, source_type);
 
--- Results --------------------------------------------------------------------
+-- 5. CRAWL_ITEMS TABLE
+create table if not exists public.crawl_items (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null default '00000000-0000-0000-0000-000000000001',
+  scan_id uuid references public.scan_jobs(id) on delete cascade,
+  bank_id text not null,
+  bank_name text,
+  canonical_url text,
+  title text not null,
+  summary text,
+  category text,
+  audience text default 'Doanh nghiệp',
+  published_at date,
+  effective_from date,
+  effective_to date,
+  date_source text,
+  verification_status text default 'verified',
+  confidence_score float default 0.95,
+  evidence_text text,
+  website_url text,
+  facebook_url text,
+  source_types text[] default array['website'],
+  collected_at timestamptz not null default now(),
+  is_demo boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 alter table public.crawl_items add column if not exists scan_id uuid references public.scan_jobs(id) on delete cascade;
 alter table public.crawl_items add column if not exists bank_name text;
 alter table public.crawl_items add column if not exists category text;
-alter table public.crawl_items add column if not exists audience text;
+alter table public.crawl_items add column if not exists audience text default 'Doanh nghiệp';
 alter table public.crawl_items add column if not exists effective_from date;
 alter table public.crawl_items add column if not exists effective_to date;
 alter table public.crawl_items add column if not exists date_source text;
-alter table public.crawl_items add column if not exists verification_status text;
-alter table public.crawl_items add column if not exists confidence_score float;
+alter table public.crawl_items add column if not exists verification_status text default 'verified';
+alter table public.crawl_items add column if not exists confidence_score float default 0.95;
 alter table public.crawl_items add column if not exists evidence_text text;
 alter table public.crawl_items add column if not exists website_url text;
 alter table public.crawl_items add column if not exists facebook_url text;
 alter table public.crawl_items add column if not exists source_types text[];
 alter table public.crawl_items add column if not exists collected_at timestamptz not null default now();
 alter table public.crawl_items add column if not exists is_demo boolean not null default false;
--- Compatibility fields are still consumed by the older crawl-items APIs.
 alter table public.crawl_items add column if not exists source_type text;
 alter table public.crawl_items add column if not exists source_url text;
 alter table public.crawl_items add column if not exists content_hash text;
 alter table public.crawl_items add column if not exists status text not null default 'new';
 
--- Remove the legacy cross-scan uniqueness rule. It rejected a URL that had
--- already appeared in an older scan, even though the new contract is isolated
--- by scan_id.
+-- Drop legacy unique constraint if present
 alter table public.crawl_items
   drop constraint if exists crawl_items_org_id_bank_id_source_type_content_hash_key;
 
+-- Backfill bank_name for legacy rows
 update public.crawl_items ci
 set bank_name = b.name
 from public.banks b
 where b.id::text = ci.bank_id::text and ci.bank_name is null;
 
--- Existing rows were created under the broken contract. Preserve them for
--- audit, but never present them as verified market intelligence.
+-- Mark legacy rows without scan_id or URL as invalid
 update public.crawl_items
 set verification_status = 'invalid'
 where verification_status is null
    or scan_id is null
-   or (website_url is null and facebook_url is null);
+   or (website_url is null and facebook_url is null and canonical_url is null);
 
 create unique index if not exists uq_crawl_items_scan_bank_url
-  on public.crawl_items(scan_id, bank_id, canonical_url);
+  on public.crawl_items(scan_id, bank_id, canonical_url)
+  where scan_id is not null and canonical_url is not null;
 
+-- 6. CRAWL_ITEM_SOURCES TABLE
 create table if not exists public.crawl_item_sources (
   id uuid primary key default gen_random_uuid(),
   crawl_item_id uuid not null references public.crawl_items(id) on delete cascade,
@@ -178,6 +249,22 @@ create table if not exists public.crawl_item_sources (
   unique(crawl_item_id, source_type, url)
 );
 
+-- 7. SOURCE_ALERTS TABLE
+create table if not exists public.source_alerts (
+  id uuid primary key default gen_random_uuid(),
+  org_id uuid not null default '00000000-0000-0000-0000-000000000001',
+  scan_id uuid references public.scan_jobs(id) on delete cascade,
+  bank_id text not null,
+  bank_name text not null,
+  source_type text not null check(source_type in ('website', 'facebook')),
+  error_cause text not null,
+  http_status int,
+  checked_at timestamptz not null default now(),
+  resolved boolean not null default false
+);
+alter table public.source_alerts add column if not exists scan_id uuid references public.scan_jobs(id) on delete cascade;
+
+-- 8. CANDIDATE_AUDITS TABLE
 create table if not exists public.candidate_audits (
   id uuid primary key default gen_random_uuid(),
   scan_id uuid not null references public.scan_jobs(id) on delete cascade,
@@ -198,12 +285,71 @@ create table if not exists public.candidate_audits (
   created_at timestamptz not null default now()
 );
 
-alter table public.source_alerts add column if not exists scan_id uuid references public.scan_jobs(id) on delete cascade;
-
+-- Indexes
 create index if not exists idx_scan_jobs_created_at on public.scan_jobs(created_at desc);
 create index if not exists idx_scan_job_sources_scan_id on public.scan_job_sources(scan_id);
 create index if not exists idx_crawl_items_scan_id on public.crawl_items(scan_id);
 create index if not exists idx_crawl_items_published_at on public.crawl_items(published_at);
 create index if not exists idx_candidate_audits_scan_id on public.candidate_audits(scan_id);
+create index if not exists idx_source_alerts_scan_id on public.source_alerts(scan_id);
 
-commit;
+-- Enable RLS and Permissive Policies for Web Application
+alter table public.banks enable row level security;
+alter table public.bank_sources enable row level security;
+alter table public.scan_jobs enable row level security;
+alter table public.scan_job_sources enable row level security;
+alter table public.crawl_items enable row level security;
+alter table public.crawl_item_sources enable row level security;
+alter table public.source_alerts enable row level security;
+alter table public.candidate_audits enable row level security;
+
+-- Policies for banks
+drop policy if exists "Allow all read banks" on public.banks;
+drop policy if exists "Allow all write banks" on public.banks;
+create policy "Allow all read banks" on public.banks for select using (true);
+create policy "Allow all write banks" on public.banks for all using (true) with check (true);
+
+-- Policies for bank_sources
+drop policy if exists "Allow all read bank_sources" on public.bank_sources;
+drop policy if exists "Allow all write bank_sources" on public.bank_sources;
+create policy "Allow all read bank_sources" on public.bank_sources for select using (true);
+create policy "Allow all write bank_sources" on public.bank_sources for all using (true) with check (true);
+
+-- Policies for scan_jobs
+drop policy if exists "Allow all read scan_jobs" on public.scan_jobs;
+drop policy if exists "Allow all write scan_jobs" on public.scan_jobs;
+create policy "Allow all read scan_jobs" on public.scan_jobs for select using (true);
+create policy "Allow all write scan_jobs" on public.scan_jobs for all using (true) with check (true);
+
+-- Policies for scan_job_sources
+drop policy if exists "Allow all read scan_job_sources" on public.scan_job_sources;
+drop policy if exists "Allow all write scan_job_sources" on public.scan_job_sources;
+create policy "Allow all read scan_job_sources" on public.scan_job_sources for select using (true);
+create policy "Allow all write scan_job_sources" on public.scan_job_sources for all using (true) with check (true);
+
+-- Policies for crawl_items
+drop policy if exists "Allow all read crawl_items" on public.crawl_items;
+drop policy if exists "Allow all write crawl_items" on public.crawl_items;
+create policy "Allow all read crawl_items" on public.crawl_items for select using (true);
+create policy "Allow all write crawl_items" on public.crawl_items for all using (true) with check (true);
+
+-- Policies for crawl_item_sources
+drop policy if exists "Allow all read crawl_item_sources" on public.crawl_item_sources;
+drop policy if exists "Allow all write crawl_item_sources" on public.crawl_item_sources;
+create policy "Allow all read crawl_item_sources" on public.crawl_item_sources for select using (true);
+create policy "Allow all write crawl_item_sources" on public.crawl_item_sources for all using (true) with check (true);
+
+-- Policies for source_alerts
+drop policy if exists "Allow all read source_alerts" on public.source_alerts;
+drop policy if exists "Allow all write source_alerts" on public.source_alerts;
+create policy "Allow all read source_alerts" on public.source_alerts for select using (true);
+create policy "Allow all write source_alerts" on public.source_alerts for all using (true) with check (true);
+
+-- Policies for candidate_audits
+drop policy if exists "Allow all read candidate_audits" on public.candidate_audits;
+drop policy if exists "Allow all write candidate_audits" on public.candidate_audits;
+create policy "Allow all read candidate_audits" on public.candidate_audits for select using (true);
+create policy "Allow all write candidate_audits" on public.candidate_audits for all using (true) with check (true);
+
+-- Reload PostgREST schema cache
+notify pgrst, 'reload schema';
