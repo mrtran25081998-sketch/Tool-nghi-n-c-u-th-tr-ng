@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { Bank, BenchmarkGroup, GroupBankScore } from '@/types';
 import { cleanGroupName } from '@/lib/scoring';
 
@@ -61,11 +61,14 @@ export default function RadarComparisonCard({
     }
   };
 
-  const getBankColor = (bankId: string) => {
-    if (bankId === mbBank?.id) return '#ff626b';
-    const idx = competitors.findIndex((b) => b.id === bankId);
-    return RADAR_PALETTE[Math.max(0, idx) % RADAR_PALETTE.length];
-  };
+  const getBankColor = useCallback(
+    (bankId: string) => {
+      if (bankId === mbBank?.id) return '#ff626b';
+      const idx = competitors.findIndex((b) => b.id === bankId);
+      return RADAR_PALETTE[Math.max(0, idx) % RADAR_PALETTE.length];
+    },
+    [mbBank, competitors]
+  );
 
   const activeBanks = useMemo(() => {
     const list: Bank[] = [];
@@ -118,7 +121,7 @@ export default function RadarComparisonCard({
         values,
       };
     });
-  }, [activeBanks, groups, groupScores, mbBank]);
+  }, [activeBanks, groups, groupScores, mbBank, getBankColor]);
 
   // Leader scores per group
   const leaderDetails = useMemo(() => {

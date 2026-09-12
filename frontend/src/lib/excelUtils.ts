@@ -1,4 +1,4 @@
-import type { Bank, BenchmarkGroup, BenchmarkComponent, BenchmarkCell, ScoreValue } from '../types/index.ts';
+import type { Bank, BenchmarkGroup, BenchmarkComponent, BenchmarkCell, ScoreValue } from '@/types';
 
 export function parseCsvText(text: string): string[][] {
   const rows: string[][] = [];

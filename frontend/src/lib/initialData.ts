@@ -1,4 +1,4 @@
-import type { Bank, BenchmarkGroup, BenchmarkComponent, BenchmarkCell, SourcePair, CrawlItem, IntelligenceItem, SourceAlert } from '../types/index.ts';
+import type { Bank, BenchmarkGroup, BenchmarkComponent, BenchmarkCell, SourcePair, CrawlItem, IntelligenceItem, SourceAlert } from '@/types';
 
 export const DEFAULT_ORG_ID = '00000000-0000-0000-0000-000000000001';
 

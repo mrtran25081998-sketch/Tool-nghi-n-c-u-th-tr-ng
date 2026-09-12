@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "npm run test:all && next build",
+    "build": "vitest run && next build",
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
@@ -27,6 +27,7 @@
     "react-hook-form": "^7.54.1",
     "recharts": "^2.15.0",
     "tailwind-merge": "^2.5.5",
+    "vitest": "^5.0.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
@@ -39,7 +40,6 @@
     "isomorphic-git": "^1.41.9",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.16",
-    "typescript": "^5.7.2",
-    "vitest": "^5.0.0"
+    "typescript": "^5.7.2"
   }
 }

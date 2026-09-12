@@ -26,7 +26,7 @@ import type {
   ScanMetrics,
   SourceExecutionResult,
   CandidateAuditItem,
-} from '../types/index.ts';
+} from '@/types';
 import { crawlBankWebsite } from './crawler/serverCrawler';
 import { crawlBankFacebook } from './crawler/facebookConnector';
 import {

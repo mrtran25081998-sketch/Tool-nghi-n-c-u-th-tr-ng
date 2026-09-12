@@ -1,4 +1,4 @@
-import type { Bank, BenchmarkGroup, BenchmarkComponent, BenchmarkCell, BankPositionSummary, GroupBankScore } from '../types/index.ts';
+import type { Bank, BenchmarkGroup, BenchmarkComponent, BenchmarkCell, BankPositionSummary, GroupBankScore } from '@/types';
 
 export function calculatePositionSummaries(
   banks: Bank[],
