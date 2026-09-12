@@ -8,12 +8,14 @@ interface SummaryStatCardsProps {
   items: IntelligenceItem[];
   totalSelectedBanks: number;
   alerts: SourceAlert[];
+  isLoadingBanks?: boolean;
 }
 
 export default function SummaryStatCards({
   items,
   totalSelectedBanks,
   alerts,
+  isLoadingBanks = false,
 }: SummaryStatCardsProps) {
   // 1. Total results
   const totalResults = items.length;
@@ -56,8 +58,14 @@ export default function SummaryStatCards({
             Ngân hàng
           </div>
           <div className="text-2xl font-extrabold text-[#0f2357] leading-none mb-1">
-            {uniqueBanksWithResults}
-            <span className="text-sm font-medium text-[#98a2b3]">/{totalSelectedBanks || uniqueBanksWithResults}</span>
+            {isLoadingBanks ? (
+              <span className="text-sm font-medium text-gray-400">...</span>
+            ) : (
+              <>
+                {uniqueBanksWithResults}
+                <span className="text-sm font-medium text-[#98a2b3]">/{totalSelectedBanks || 16}</span>
+              </>
+            )}
           </div>
           <div className="text-[11px] text-[#667085]">
             Số ngân hàng có kết quả quét
