@@ -53,6 +53,9 @@ export default function SummaryPage() {
   } | null>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
+  const [isLoadingBanks, setIsLoadingBanks] = useState(true);
+  const [banksError, setBanksError] = useState<string | null>(null);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
@@ -61,19 +64,25 @@ export default function SummaryPage() {
   // Load Banks list from Cấu hình nguồn API
   const loadBanks = useCallback(async () => {
     try {
+      setIsLoadingBanks(true);
+      setBanksError(null);
       const res = await fetch('/api/banks');
+      if (!res.ok) throw new Error('HTTP ' + res.status);
       const json = await res.json();
-      if (json.data) {
+      if (json.data && Array.isArray(json.data) && json.data.length > 0) {
         setBanks(json.data);
-        // Default select all active banks
-        if (selectedBankIds.length === 0) {
-          setSelectedBankIds(json.data.map((b: Bank) => b.id));
-        }
+        const activeBanks = json.data.filter((b: Bank) => b.active !== false);
+        setSelectedBankIds(activeBanks.map((b: Bank) => b.id));
+      } else {
+        throw new Error('Danh sách cấu hình nguồn trống');
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error('Failed to load banks', e);
+      setBanksError('Không tải được cấu hình nguồn');
+    } finally {
+      setIsLoadingBanks(false);
     }
-  }, [selectedBankIds.length]);
+  }, []);
 
   // Load Source Alerts
   const loadAlerts = useCallback(async () => {
@@ -81,7 +90,7 @@ export default function SummaryPage() {
       const res = await fetch('/api/alerts');
       const json = await res.json();
       if (json.data) {
-        setAlerts(json.data);
+        setAlerts(json.data.filter((a: SourceAlert) => !a.resolved));
       }
     } catch (e) {
       console.error('Failed to load alerts', e);
@@ -128,10 +137,10 @@ export default function SummaryPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          date_from: dateFrom,
-          date_to: dateTo,
-          selected_banks: selectedBankIds,
-          source_types: [
+          fromDate: dateFrom,
+          toDate: dateTo,
+          bankIds: selectedBankIds,
+          sourceTypes: [
             ...(scanSources.website ? (['website'] as const) : []),
             ...(scanSources.facebook ? (['facebook'] as const) : []),
           ],
@@ -170,14 +179,34 @@ export default function SummaryPage() {
                 sourceResults: pollJson.sourceResults || job.sourceResults,
                 status: pollJson.status || job.status,
               });
-              if (pollJson.items && pollJson.items.length > 0) {
-                setItems(pollJson.items);
-              } else {
-                loadResults();
+
+              // Fetch verified scan results directly from results endpoint
+              let fetchedItems: IntelligenceItem[] = [];
+              try {
+                const resResults = await fetch(`/api/scans/${jobId}/results?mode=${isLiveMode ? 'live' : 'demo'}`);
+                const jsonResults = await resResults.json();
+                if (jsonResults.success && Array.isArray(jsonResults.items)) {
+                  fetchedItems = jsonResults.items;
+                }
+              } catch (e) {
+                console.error('Failed to fetch scan results', e);
               }
+
+              if (fetchedItems.length === 0 && pollJson.items && pollJson.items.length > 0) {
+                fetchedItems = pollJson.items;
+              }
+
+              const savedCount = (pollJson.metrics || job.metrics)?.itemsSaved || 0;
+              if (savedCount > 0 && fetchedItems.length === 0) {
+                showToast('Lỗi kỹ thuật: Dữ liệu đã lưu nhưng không đọc được (Data Contract Error)');
+                setLastScanReport((prev) => prev ? { ...prev, status: 'data_contract_error' } : null);
+              } else {
+                setItems(fetchedItems);
+              }
+
               showToast(
-                job.totalFound > 0
-                  ? `🎉 Quét hoàn tất: Thu thập ${job.totalFound} nội dung doanh nghiệp!`
+                savedCount > 0
+                  ? `🎉 Quét hoàn tất: Thu thập ${savedCount} nội dung doanh nghiệp!`
                   : 'Lượt quét hoàn thành (0 kết quả phù hợp với khoảng ngày/bộ lọc)'
               );
             } else if (job.status === 'cancelled' || job.status === 'failed') {
@@ -276,6 +305,8 @@ export default function SummaryPage() {
       {/* 1. Khu thiết lập lượt quét */}
       <ScanSetupPanel
         banks={banks}
+        isLoadingBanks={isLoadingBanks}
+        banksError={banksError}
         dateFrom={dateFrom}
         dateTo={dateTo}
         onDateFromChange={setDateFrom}
@@ -297,6 +328,7 @@ export default function SummaryPage() {
         items={items}
         totalSelectedBanks={selectedBankIds.length}
         alerts={alerts}
+        isLoadingBanks={isLoadingBanks}
       />
 
       {/* 3. Cảnh báo nguồn lỗi */}
