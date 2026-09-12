@@ -73,8 +73,18 @@ export default function SourceAlertsBanner({
                   {alert.sourceType === 'website' ? 'Website' : 'Facebook'}
                 </span>
 
-                <span className="text-[#475467] font-medium">
-                  {alert.errorCause}
+                <span className="text-[#475467] font-medium flex items-center gap-1.5">
+                  {alert.errorMessage || alert.errorCause || alert.errorCode}
+                  {alert.sourceUrl && (
+                    <a
+                      href={alert.sourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#1646d8] hover:underline inline-flex items-center gap-0.5 ml-1 text-[11px]"
+                    >
+                      (URL nguồn)
+                    </a>
+                  )}
                 </span>
               </div>
 
