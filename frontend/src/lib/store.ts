@@ -617,9 +617,6 @@ class Store {
       }
     }
 
-    // Run async scan pipeline in background without blocking response
-    this.runScanPipeline(newJob);
-
     return newJob;
   }
 
@@ -658,7 +655,7 @@ class Store {
 
     // Run banks concurrently for fast execution within serverless limits
     const bankTasks = targetList.map(async (bank, idx) => {
-      const current = this.scanJobDetails.find((j) => j.id === job.id);
+      const current = this.scanJobDetails.find((j) => j.id === job.id) || job;
       if (!current || current.status === 'cancelled') return;
 
       const sourcePair = allSources.find((sp) => sp.bank_id === bank.id);
@@ -856,11 +853,17 @@ class Store {
         metrics.itemsAccepted++;
       }
 
-      // Persist items to Supabase crawl_items
+      // Persist items to Supabase crawl_items safely
       if (supabase && mergedForBank.length > 0) {
         try {
-          await supabase.from('crawl_items').upsert(
-            mergedForBank.map((item) => ({
+          const insertPayload = mergedForBank.map((item) => {
+            let safeIso: string | null = null;
+            if (item.publishedAt) {
+              const d = new Date(item.publishedAt);
+              if (!isNaN(d.getTime())) safeIso = d.toISOString();
+            }
+
+            return {
               id: crypto.randomUUID(),
               org_id: DEFAULT_ORG_ID,
               job_id: job.id,
@@ -868,7 +871,7 @@ class Store {
               source_type: item.sourceTypes.includes('facebook') && !item.sourceTypes.includes('website') ? 'facebook' : 'website',
               source_url: item.websiteUrl || item.facebookUrl || '',
               canonical_url: item.websiteUrl || item.facebookUrl || '',
-              published_at: item.publishedAt ? new Date(item.publishedAt).toISOString() : null,
+              published_at: safeIso,
               detected_at: new Date().toISOString(),
               title: item.title,
               summary: item.summary,
@@ -885,17 +888,21 @@ class Store {
                 facebookUrl: item.facebookUrl,
                 sourceTypes: item.sourceTypes,
               },
-            }))
-          );
+            };
+          });
+
+          await supabase.from('crawl_items').upsert(insertPayload, {
+            onConflict: 'org_id,bank_id,source_type,content_hash',
+          });
         } catch (e) {
-          console.warn('Supabase crawl_items upsert error:', e);
+          console.warn('Supabase crawl_items upsert warning:', e);
         }
       }
     });
 
     await Promise.allSettled(bankTasks);
 
-    const current = this.scanJobDetails.find((j) => j.id === job.id);
+    const current = this.scanJobDetails.find((j) => j.id === job.id) || job;
     if (current && current.status !== 'cancelled') {
       let finalStatus: ScanJobDetail['status'] = 'completed';
       if (metrics.sourcesFailed === 0 && metrics.itemsSaved > 0) {
@@ -940,7 +947,7 @@ class Store {
             finished_at: new Date().toISOString(),
           }).eq('id', job.id);
         } catch (e) {
-          console.warn('Supabase crawl_jobs final update error:', e);
+          console.warn('Supabase crawl_jobs final update warning:', e);
         }
       }
     }
