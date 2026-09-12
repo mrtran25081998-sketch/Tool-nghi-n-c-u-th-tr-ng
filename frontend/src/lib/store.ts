@@ -238,7 +238,10 @@ class Store {
         .select('*, banks(name)')
         .eq('org_id', this.orgId)
         .order('display_order', { ascending: true });
-      if (!error && data && data.length > 0) {
+      if (error) {
+        throw new Error(`Không thể đọc cấu hình nguồn (bank_sources): ${error.message}. Hãy chạy migration sửa schema production.`);
+      }
+      if (data) {
         return data.map((item: any) => ({
           ...item,
           bank_name: item.banks?.name || item.bank_name || 'Ngân hàng',
@@ -306,9 +309,8 @@ class Store {
         website_verified: false,
         display_order: maxOrder + 1,
       }).select().single();
-      if (!error && dbData) {
-        pair.id = dbData.id;
-      }
+      if (error) throw new Error(`Không thể lưu cấu hình nguồn: ${error.message}`);
+      if (dbData) pair.id = dbData.id;
     }
 
     this.sourcePairs.push(pair);
@@ -321,10 +323,11 @@ class Store {
       const dbUpdates: any = { ...updates, updated_at: new Date().toISOString() };
       delete dbUpdates.bank_name;
       delete dbUpdates.banks;
-      await supabase
+      const { error } = await supabase
         .from('bank_sources')
         .update(dbUpdates)
         .eq('id', id);
+      if (error) throw new Error(`Không thể cập nhật cấu hình nguồn: ${error.message}`);
     }
 
     const index = this.sourcePairs.findIndex((s) => s.id === id);
@@ -336,7 +339,7 @@ class Store {
   }
 
   async verifySourcePair(id: string, type: 'facebook' | 'website'): Promise<SourcePair> {
-    const pair = this.sourcePairs.find((s) => s.id === id);
+    const pair = (await this.getSourcePairs()).find((s) => s.id === id);
     if (!pair) throw new Error('Không tìm thấy nguồn');
 
     const targetUrl = type === 'facebook' ? pair.facebook_url : pair.website_url;
@@ -349,8 +352,27 @@ class Store {
 
     const detected = detectBankName(url);
     if (type === 'facebook') {
+      const { testFacebookTokenAndPage } = await import('@/lib/crawler/facebookConnector');
+      const result = await testFacebookTokenAndPage({
+        facebookPageId: pair.facebook_page_id,
+        facebookUrl: pair.facebook_url,
+      });
+      if (!result.ok) throw new Error(result.message);
       pair.facebook_verified = true;
     } else {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 10000);
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          redirect: 'follow',
+          signal: controller.signal,
+          headers: { 'User-Agent': 'BankScope-Source-Verifier/1.0' },
+        });
+        if (!response.ok) throw new Error(`Website trả về HTTP ${response.status}`);
+      } finally {
+        clearTimeout(timer);
+      }
       pair.website_verified = true;
     }
 
@@ -361,7 +383,7 @@ class Store {
 
     const supabase = this.getClient();
     if (supabase) {
-      await supabase
+      const { error } = await supabase
         .from('bank_sources')
         .update({
           facebook_verified: pair.facebook_verified,
@@ -369,7 +391,11 @@ class Store {
           updated_at: pair.updated_at,
         })
         .eq('id', id);
+      if (error) throw new Error(`Xác thực thành công nhưng không thể lưu trạng thái: ${error.message}`);
     }
+
+    const memoryIndex = this.sourcePairs.findIndex((s) => s.id === id);
+    if (memoryIndex >= 0) this.sourcePairs[memoryIndex] = pair;
 
     return pair;
   }
@@ -395,7 +421,10 @@ class Store {
   }): Promise<IntelligenceItem[]> {
     const supabase = this.getClient();
     if (supabase) {
-      let query = supabase.from('crawl_items').select('*');
+      let query = supabase
+        .from('crawl_items')
+        .select('*')
+        .in('verification_status', ['verified', 'review']);
       if (params?.scan_id) {
         query = query.eq('scan_id', params.scan_id);
       }
@@ -418,7 +447,7 @@ class Store {
 
       const { data, error } = await query.order('published_at', { ascending: false });
       if (error) {
-        console.warn(`Supabase crawl_items query warning: ${error.message}`);
+        throw new Error(`Không thể đọc kết quả quét: ${error.message}. Schema Supabase chưa đồng bộ.`);
       } else if (data) {
         const dbItems: IntelligenceItem[] = data.map((d: any) => ({
           id: d.id,
@@ -431,8 +460,8 @@ class Store {
           audience: d.audience || 'Doanh nghiệp',
           websiteUrl: d.website_url,
           facebookUrl: d.facebook_url,
-          sourceTypes: d.source_types || (d.website_url ? ['website'] : ['facebook']),
-          verificationStatus: d.verification_status,
+          sourceTypes: d.source_types || (d.source_type ? [d.source_type] : []),
+          verificationStatus: d.verification_status || 'review',
           confidenceScore: d.confidence_score ?? 0.95,
           collectedAt: d.collected_at || new Date().toISOString(),
           scanId: d.scan_id,
@@ -443,9 +472,7 @@ class Store {
         if (params?.scan_id) {
           return dbItems;
         }
-        if (dbItems.length > 0) {
-          return dbItems;
-        }
+        return dbItems;
       }
     }
 
@@ -524,13 +551,14 @@ class Store {
 
     const supabase = this.getClient();
     if (supabase) {
-      try {
-        await supabase.from('crawl_items').upsert({
+      const { error } = await supabase.from('crawl_items').upsert({
           id: item.id,
           org_id: this.orgId,
           scan_id: item.scanId,
           bank_id: item.bankId,
           bank_name: item.bankName,
+          source_type: item.sourceTypes[0] || 'website',
+          source_url: item.websiteUrl || item.facebookUrl || item.id,
           canonical_url: item.websiteUrl || item.facebookUrl || item.id,
           published_at: item.publishedAt || null,
           title: item.title,
@@ -540,14 +568,14 @@ class Store {
           website_url: item.websiteUrl || null,
           facebook_url: item.facebookUrl || null,
           source_types: item.sourceTypes,
+          content_hash: item.websiteUrl || item.facebookUrl || item.id,
+          status: 'accepted',
           verification_status: item.verificationStatus,
           confidence_score: item.confidenceScore,
           collected_at: item.collectedAt,
           is_demo: Boolean(item.isDemo),
         }, { onConflict: 'scan_id,bank_id,canonical_url' });
-      } catch (err) {
-        console.warn('Supabase upsert crawl_items failed', err);
-      }
+      if (error) throw new Error(`Không thể lưu kết quả quét: ${error.message}`);
     }
     return item;
   }
@@ -634,8 +662,6 @@ class Store {
       },
     };
 
-    this.scanJobDetails.unshift(newJob);
-
     const supabase = this.getClient();
     if (supabase) {
       const { error: jobErr } = await supabase.from('scan_jobs').insert({
@@ -652,7 +678,7 @@ class Store {
         total_found: 0,
       });
       if (jobErr) {
-        console.warn(`Lỗi tạo lượt quét Supabase: ${jobErr.message}`);
+        throw new Error(`Không thể tạo lượt quét trong Supabase: ${jobErr.message}. Hãy chạy migration sửa schema production.`);
       }
 
       // Create scan_job_sources rows in Supabase
@@ -674,10 +700,13 @@ class Store {
       if (sourceRows.length > 0) {
         const { error: srcErr } = await supabase.from('scan_job_sources').insert(sourceRows);
         if (srcErr) {
-          console.warn('Lỗi tạo scan_job_sources:', srcErr.message);
+          await supabase.from('scan_jobs').delete().eq('id', id);
+          throw new Error(`Không thể tạo danh sách nguồn quét: ${srcErr.message}. Lượt quét đã được hoàn tác.`);
         }
       }
     }
+
+    this.scanJobDetails.unshift(newJob);
 
     return newJob;
   }
@@ -697,7 +726,7 @@ class Store {
         .maybeSingle();
 
       if (jobErr) {
-        console.warn(`Lỗi truy vấn scan_jobs: ${jobErr.message}`);
+        throw new Error(`Không thể đọc trạng thái lượt quét: ${jobErr.message}`);
       }
       if (!job) {
         const inMemory = this.scanJobDetails.find((j) => j.id === id);
@@ -712,7 +741,7 @@ class Store {
         .eq('scan_id', id);
 
       if (sourcesErr) {
-        console.warn(`Lỗi truy vấn scan_job_sources: ${sourcesErr.message}`);
+        throw new Error(`Không thể đọc trạng thái nguồn quét: ${sourcesErr.message}`);
       }
 
       // Fetch candidate audits
@@ -1381,12 +1410,23 @@ class Store {
   async getCrawlJobs(): Promise<CrawlJob[]> {
     const supabase = this.getClient();
     if (supabase) {
-      try {
-        const { data, error } = await supabase.from('crawl_jobs').select('*').order('created_at', { ascending: false });
-        if (!error && data && data.length > 0) return data as CrawlJob[];
-      } catch (err) {
-        console.warn('Supabase getCrawlJobs warning:', err);
-      }
+      const { data, error } = await supabase
+        .from('scan_jobs')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw new Error(`Không thể đọc danh sách lượt quét: ${error.message}`);
+      return (data || []).map((job: any) => ({
+        id: job.id,
+        org_id: job.org_id,
+        date_from: job.date_from,
+        date_to: job.date_to,
+        status: job.status,
+        progress: job.progress_percent || 0,
+        error_summary: job.current_stage || null,
+        created_at: job.created_at,
+        started_at: job.started_at,
+        finished_at: job.finished_at,
+      })) as CrawlJob[];
     }
     return [...this.crawlJobs];
   }

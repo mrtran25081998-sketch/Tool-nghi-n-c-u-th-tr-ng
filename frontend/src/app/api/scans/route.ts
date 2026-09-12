@@ -2,7 +2,9 @@ import { NextRequest, NextResponse, after } from 'next/server';
 import { store } from '@/lib/store';
 import { runScanWorker } from '@/lib/crawler/scanWorker';
 
-export const maxDuration = 60;
+// A multi-bank crawl cannot reliably finish inside the old 60-second limit.
+// Production should still prefer BACKEND_WORKER_URL (a durable worker/queue).
+export const maxDuration = 300;
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
@@ -63,10 +65,11 @@ export async function POST(req: NextRequest) {
       sourceTypes,
     });
 
-    // If external FastAPI worker is configured, notify it
+    // Use exactly one execution path. The previous implementation started both
+    // the external worker and the Next.js worker, creating duplicate crawls.
     const backendWorkerUrl = process.env.BACKEND_WORKER_URL;
     if (backendWorkerUrl) {
-      fetch(`${backendWorkerUrl.replace(/\/+$/, '')}/internal/process-job`, {
+      const workerResponse = await fetch(`${backendWorkerUrl.replace(/\/+$/, '')}/internal/process-job`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -74,21 +77,15 @@ export async function POST(req: NextRequest) {
           date_from: fromDate,
           date_to: toDate,
         }),
-      }).catch((e) => console.warn('FastAPI worker trigger failed:', e));
-    }
-
-    // Run background worker asynchronously via Next.js after()
-    try {
-      after(async () => {
-        try {
-          await runScanWorker(job.id);
-        } catch (workerErr) {
-          console.error('[Worker Error]', workerErr);
-        }
       });
-    } catch {
-      setImmediate(() => {
-        runScanWorker(job.id).catch((e) => console.error('[Worker setImmediate Error]', e));
+      if (!workerResponse.ok) {
+        throw new Error(`Worker từ chối lượt quét (HTTP ${workerResponse.status})`);
+      }
+    } else {
+      after(async () => {
+        await runScanWorker(job.id).catch((workerErr) => {
+          console.error('[Worker Error]', workerErr);
+        });
       });
     }
 

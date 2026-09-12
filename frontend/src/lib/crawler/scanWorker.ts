@@ -14,6 +14,12 @@ function getClient() {
   return getSupabaseAdmin() || getSupabaseClient();
 }
 
+function assertDb(result: { error?: { message?: string } | null }, operation: string) {
+  if (result.error) {
+    throw new Error(`DATABASE_WRITE_FAILED (${operation}): ${result.error.message || 'unknown error'}`);
+  }
+}
+
 /**
  * Concurrency pool runner: limits concurrent promises to `concurrency`
  */
@@ -77,7 +83,7 @@ async function executeWithTimeoutAndRetry<T>(
 /**
  * Main Background Scan Worker function
  */
-export async function runScanWorker(scanId: string): Promise<void> {
+async function runScanWorkerInternal(scanId: string): Promise<void> {
   const supabase = getClient();
   console.log(`[ScanWorker] 🚀 Starting background worker for scan ${scanId}`);
 
@@ -138,7 +144,7 @@ export async function runScanWorker(scanId: string): Promise<void> {
         };
         jobSources.push(item);
         if (supabase) {
-          await supabase.from('scan_job_sources').insert(item);
+          assertDb(await supabase.from('scan_job_sources').insert(item), 'insert scan_job_sources');
         }
       }
     }
@@ -146,11 +152,11 @@ export async function runScanWorker(scanId: string): Promise<void> {
 
   // Update scan_jobs status to running
   if (supabase) {
-    await supabase.from('scan_jobs').update({
+    assertDb(await supabase.from('scan_jobs').update({
       status: 'running',
       current_stage: 'Bắt đầu quét các nguồn...',
       progress_percent: 5,
-    }).eq('id', scanId);
+    }).eq('id', scanId), 'mark scan running');
   }
 
   // 3. Prepare bank sources lookup
@@ -189,10 +195,10 @@ export async function runScanWorker(scanId: string): Promise<void> {
 
     // Mark source running
     if (supabase) {
-      await supabase.from('scan_job_sources').update({
+      assertDb(await supabase.from('scan_job_sources').update({
         status: 'running',
         started_at: new Date().toISOString(),
-      }).match({ scan_id: scanId, bank_id: bankId, source_type: sourceType });
+      }).match({ scan_id: scanId, bank_id: bankId, source_type: sourceType }), 'mark source running');
     }
 
     aggregatedMetrics.sourcesAttempted++;
@@ -249,8 +255,6 @@ export async function runScanWorker(scanId: string): Promise<void> {
           crawlSuccess = true;
           // Persist verified items
           for (const art of webResult.articles) {
-            itemsFound++;
-            totalSavedItems++;
             if (supabase) {
               const { data: itemData, error: itemErr } = await supabase.from('crawl_items').upsert(
                 {
@@ -258,6 +262,8 @@ export async function runScanWorker(scanId: string): Promise<void> {
                   scan_id: scanId,
                   bank_id: bankId,
                   bank_name: bankName,
+                  source_type: 'website',
+                  source_url: art.url,
                   canonical_url: art.url,
                   title: art.title,
                   summary: art.description || art.content.slice(0, 250),
@@ -272,13 +278,16 @@ export async function runScanWorker(scanId: string): Promise<void> {
                   evidence_text: art.content.slice(0, 500),
                   website_url: art.url,
                   source_types: ['website'],
+                  content_hash: art.url,
+                  status: 'accepted',
                   collected_at: new Date().toISOString(),
                 },
                 { onConflict: 'scan_id,bank_id,canonical_url' }
               ).select('id').single();
 
-              if (!itemErr && itemData?.id) {
-                await supabase.from('crawl_item_sources').upsert(
+              if (itemErr) throw new Error(`DATABASE_WRITE_FAILED (website item): ${itemErr.message}`);
+              if (!itemData?.id) throw new Error('DATABASE_WRITE_FAILED (website item): missing id');
+              const sourceWrite = await supabase.from('crawl_item_sources').upsert(
                   {
                     crawl_item_id: itemData.id,
                     scan_id: scanId,
@@ -291,8 +300,10 @@ export async function runScanWorker(scanId: string): Promise<void> {
                   },
                   { onConflict: 'crawl_item_id,source_type,url' }
                 );
-              }
+              assertDb(sourceWrite, 'website item source');
             }
+            itemsFound++;
+            totalSavedItems++;
           }
 
           // Persist candidate audits
@@ -312,7 +323,7 @@ export async function runScanWorker(scanId: string): Promise<void> {
               effective_to: ca.effectiveTo,
               audience: ca.audience,
             }));
-            await supabase.from('candidate_audits').insert(auditRows);
+            assertDb(await supabase.from('candidate_audits').insert(auditRows), 'candidate audits');
           }
         }
       } else if (sourceType === 'facebook') {
@@ -348,8 +359,6 @@ export async function runScanWorker(scanId: string): Promise<void> {
         } else {
           crawlSuccess = true;
           for (const art of fbResult.articles) {
-            itemsFound++;
-            totalSavedItems++;
             if (supabase) {
               const { data: itemData, error: itemErr } = await supabase.from('crawl_items').upsert(
                 {
@@ -357,6 +366,8 @@ export async function runScanWorker(scanId: string): Promise<void> {
                   scan_id: scanId,
                   bank_id: bankId,
                   bank_name: bankName,
+                  source_type: 'facebook',
+                  source_url: art.url,
                   canonical_url: art.url,
                   title: art.title,
                   summary: art.description || art.content.slice(0, 250),
@@ -371,13 +382,16 @@ export async function runScanWorker(scanId: string): Promise<void> {
                   evidence_text: art.content.slice(0, 500),
                   facebook_url: art.url,
                   source_types: ['facebook'],
+                  content_hash: art.url,
+                  status: 'accepted',
                   collected_at: new Date().toISOString(),
                 },
                 { onConflict: 'scan_id,bank_id,canonical_url' }
               ).select('id').single();
 
-              if (!itemErr && itemData?.id) {
-                await supabase.from('crawl_item_sources').upsert(
+              if (itemErr) throw new Error(`DATABASE_WRITE_FAILED (facebook item): ${itemErr.message}`);
+              if (!itemData?.id) throw new Error('DATABASE_WRITE_FAILED (facebook item): missing id');
+              const sourceWrite = await supabase.from('crawl_item_sources').upsert(
                   {
                     crawl_item_id: itemData.id,
                     scan_id: scanId,
@@ -391,8 +405,10 @@ export async function runScanWorker(scanId: string): Promise<void> {
                   },
                   { onConflict: 'crawl_item_id,source_type,url' }
                 );
-              }
+              assertDb(sourceWrite, 'facebook item source');
             }
+            itemsFound++;
+            totalSavedItems++;
           }
         }
       }
@@ -411,7 +427,7 @@ export async function runScanWorker(scanId: string): Promise<void> {
 
       // Save alert to source_alerts
       if (supabase) {
-        await supabase.from('source_alerts').insert({
+        assertDb(await supabase.from('source_alerts').insert({
           org_id: '00000000-0000-0000-0000-000000000001',
           scan_id: scanId,
           bank_id: bankId,
@@ -421,7 +437,7 @@ export async function runScanWorker(scanId: string): Promise<void> {
           http_status: httpStatus,
           checked_at: new Date().toISOString(),
           resolved: false,
-        });
+        }), 'source alert');
       }
     } else {
       aggregatedMetrics.sourcesSucceeded++;
@@ -430,7 +446,7 @@ export async function runScanWorker(scanId: string): Promise<void> {
 
     // Update scan_job_sources in Supabase
     if (supabase) {
-      await supabase.from('scan_job_sources').update({
+      assertDb(await supabase.from('scan_job_sources').update({
         status: finalSourceStatus,
         items_found: itemsFound,
         pages_discovered: pagesDiscovered,
@@ -441,7 +457,7 @@ export async function runScanWorker(scanId: string): Promise<void> {
         error_message: errorMessage,
         http_status: httpStatus,
         finished_at: new Date().toISOString(),
-      }).match({ scan_id: scanId, bank_id: bankId, source_type: sourceType });
+      }).match({ scan_id: scanId, bank_id: bankId, source_type: sourceType }), 'finish source');
     }
 
     // Granular update to scan_jobs progress after each source
@@ -449,7 +465,7 @@ export async function runScanWorker(scanId: string): Promise<void> {
     const stageDesc = `Đã quét ${completedSources}/${totalSources} nguồn: ${bankName} (${sourceType === 'website' ? 'Website' : 'Facebook'})`;
 
     if (supabase) {
-      await supabase.from('scan_jobs').update({
+      assertDb(await supabase.from('scan_jobs').update({
         progress_percent: percent,
         current_stage: stageDesc,
         current_bank_name: bankName,
@@ -459,7 +475,7 @@ export async function runScanWorker(scanId: string): Promise<void> {
           itemsSaved: totalSavedItems,
           sourceErrors: totalFailedSources,
         },
-      }).eq('id', scanId);
+      }).eq('id', scanId), 'update scan progress');
     }
   });
 
@@ -482,7 +498,7 @@ export async function runScanWorker(scanId: string): Promise<void> {
       : `Hoàn tất quét: Thu thập ${totalSavedItems} nội dung`;
 
   if (supabase) {
-    await supabase.from('scan_jobs').update({
+    assertDb(await supabase.from('scan_jobs').update({
       status: finalStatus,
       progress_percent: 100,
       current_stage: finalStage,
@@ -493,8 +509,37 @@ export async function runScanWorker(scanId: string): Promise<void> {
         itemsSaved: totalSavedItems,
         sourceErrors: totalFailedSources,
       },
-    }).eq('id', scanId);
+    }).eq('id', scanId), 'finish scan');
   }
 
   console.log(`[ScanWorker] 🏁 Scan ${scanId} finished with status: ${finalStatus}, items: ${totalSavedItems}, errors: ${totalFailedSources}`);
+}
+
+/**
+ * Public entry point. A fatal worker/database error must be visible in the job
+ * record; otherwise the UI waits forever on a misleading `queued` status.
+ */
+export async function runScanWorker(scanId: string): Promise<void> {
+  try {
+    await runScanWorkerInternal(scanId);
+  } catch (error: any) {
+    const message = error?.message || 'Lỗi worker không xác định';
+    const supabase = getClient();
+    if (supabase) {
+      const result = await supabase
+        .from('scan_jobs')
+        .update({
+          status: 'failed',
+          progress_percent: 100,
+          current_stage: `Lượt quét thất bại: ${message}`.slice(0, 500),
+          error_summary: message.slice(0, 1000),
+          finished_at: new Date().toISOString(),
+        })
+        .eq('id', scanId);
+      if (result.error) {
+        console.error(`[ScanWorker] Could not mark ${scanId} failed:`, result.error.message);
+      }
+    }
+    throw error;
+  }
 }
