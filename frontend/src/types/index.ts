@@ -433,11 +433,15 @@ export interface IntelligenceItem {
 
 export interface SourceAlert {
   id: string;
+  scanId?: string;
   bankId: string;
   bankName: string;
   sourceType: 'website' | 'facebook';
-  errorCause: string; // e.g. 'HTTP 403 Forbidden', 'Yêu cầu đăng nhập Facebook', 'Không lấy được permalink'
+  errorCode?: string;
+  errorMessage?: string;
+  errorCause?: string; // e.g. 'HTTP 403 Forbidden', 'Yêu cầu đăng nhập Facebook', 'Không lấy được permalink'
   httpStatus?: number;
+  sourceUrl?: string;
   checkedAt: string;
   resolved?: boolean;
 }
@@ -451,11 +455,14 @@ export interface ScanMetrics {
   pagesDiscovered: number;
   pagesFetched: number;
   itemsParsed: number;
+  itemsAccepted: number;
   itemsRejectedByDate: number;
   itemsRejectedByAudience: number;
   itemsMissingDate: number;
   itemsDeduplicated: number;
   itemsSaved: number;
+  itemsReturned?: number;
+  itemsRendered?: number;
 }
 
 export interface SourceExecutionResult {
@@ -477,7 +484,7 @@ export interface ScanJobDetail {
   dateTo: string;
   selectedBanks: string[]; // Bank IDs
   sourceTypes: ('website' | 'facebook')[];
-  status: 'queued' | 'running' | 'completed' | 'cancelled' | 'failed' | 'success' | 'partial' | 'empty';
+  status: 'queued' | 'running' | 'completed' | 'cancelled' | 'failed' | 'success' | 'partial' | 'empty' | 'data_contract_error';
   progressPercent: number;
   currentStage: string; // e.g. 'Đang quét ngân hàng 3/15 – Vietcombank'
   currentBankName?: string;
