@@ -249,14 +249,33 @@ export function detectPageType(url: string, title: string, html: string): PageTy
 
   // Product detail patterns
   if (
-    urlLower.includes('/san-pham/') ||
-    urlLower.includes('/giai-phap/') ||
-    urlLower.includes('/dich-vu/') ||
-    urlLower.includes('/tai-khoan-') ||
-    urlLower.includes('/tin-dung-') ||
+    urlLower.includes('/san-pham') ||
+    urlLower.includes('/giai-phap') ||
+    urlLower.includes('/dich-vu') ||
+    urlLower.includes('/tai-khoan') ||
+    urlLower.includes('/tin-dung') ||
     urlLower.includes('/the-') ||
-    urlLower.includes('/bao-lanh-') ||
-    urlLower.includes('/tien-gui-')
+    urlLower.includes('/the.') ||
+    urlLower.includes('/the/') ||
+    urlLower.includes('the-doanh-nghiep') ||
+    urlLower.includes('/bao-lanh') ||
+    urlLower.includes('/tien-gui') ||
+    urlLower.includes('/tai-tro') ||
+    urlLower.includes('/quan-ly-dong-tien') ||
+    urlLower.includes('/thau-chi') ||
+    urlLower.includes('/vay-') ||
+    urlLower.includes('/ebank') ||
+    urlLower.includes('/biz') ||
+    urlLower.includes('/ngan-hang-so') ||
+    titleLower.includes('thẻ doanh nghiệp') ||
+    titleLower.includes('bảo lãnh') ||
+    titleLower.includes('tài trợ thương mại') ||
+    titleLower.includes('ngân hàng số') ||
+    titleLower.includes('ebank') ||
+    titleLower.includes('tài khoản doanh nghiệp') ||
+    titleLower.includes('quản lý dòng tiền') ||
+    titleLower.includes('gói tín dụng') ||
+    titleLower.includes('dịch vụ thấu chi')
   ) {
     return 'product';
   }
@@ -293,7 +312,7 @@ export function extractPageDates(html: string, url?: string): {
   let effectiveTo: string | null = null;
   let dateSource = 'DATE_NOT_FOUND';
 
-  // 1. JSON-LD datePublished
+  // 1. JSON-LD datePublished or dateModified
   const jsonLdMatch = html.match(/<script\b[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
   if (jsonLdMatch) {
     for (const match of jsonLdMatch) {
@@ -301,7 +320,7 @@ export function extractPageDates(html: string, url?: string): {
         const content = match.replace(/<script\b[^>]*>|<\/script>/gi, '');
         const data = JSON.parse(content);
         const obj = Array.isArray(data) ? data[0] : data;
-        const candidate = obj?.datePublished || obj?.dateCreated || obj?.uploadDate;
+        const candidate = obj?.datePublished || obj?.dateCreated || obj?.uploadDate || obj?.dateModified;
         if (candidate) {
           const iso = new Date(candidate).toISOString().split('T')[0];
           if (/^\d{4}-\d{2}-\d{2}$/.test(iso)) {
@@ -318,8 +337,11 @@ export function extractPageDates(html: string, url?: string): {
   if (!publishedAt) {
     const metaPatterns = [
       /<meta\b[^>]*property=["']article:published_time["'][^>]*content=["']([^"']+)["']/i,
+      /<meta\b[^>]*property=["']article:modified_time["'][^>]*content=["']([^"']+)["']/i,
+      /<meta\b[^>]*property=["']og:updated_time["'][^>]*content=["']([^"']+)["']/i,
       /<meta\b[^>]*name=["']pubdate["'][^>]*content=["']([^"']+)["']/i,
       /<meta\b[^>]*name=["']publishdate["'][^>]*content=["']([^"']+)["']/i,
+      /<meta\b[^>]*name=["']last-modified["'][^>]*content=["']([^"']+)["']/i,
       /<meta\b[^>]*name=["']date["'][^>]*content=["']([^"']+)["']/i,
     ];
     for (const pat of metaPatterns) {
@@ -367,10 +389,10 @@ export function extractPageDates(html: string, url?: string): {
     }
   }
 
-  // 5. Explicit "ngày đăng / ngày đăng bài / đăng ngày / ngày phát hành" in HTML text
+  // 5. Explicit "ngày đăng / ngày đăng bài / đăng ngày / ngày phát hành / cập nhật" in HTML text
   if (!publishedAt) {
     const publishTextMatch = html.match(
-      /(?:ngày đăng(?:\s+bài)?|đăng ngày|ngày phát hành|xuất bản ngày|cập nhật ngày)\s*[:\-]?\s*([0-3]?\d)[\/\-\.]([0-1]?\d)[\/\-\.](202\d)/i
+      /(?:ngày đăng(?:\s+bài)?|đăng ngày|ngày phát hành|xuất bản ngày|cập nhật ngày|cập nhật lúc|ngày hiệu lực|ngày áp dụng)\s*[:\-]?\s*([0-3]?\d)[\/\-\.]([0-1]?\d)[\/\-\.](202\d)/i
     );
     if (publishTextMatch) {
       const day = publishTextMatch[1].padStart(2, '0');
@@ -407,7 +429,7 @@ export function extractPageDates(html: string, url?: string): {
 
   // "từ ngày DD/MM/YYYY đến ngày DD/MM/YYYY"
   const rangeMatch = html.match(
-    /(?:từ ngày|hiệu lực từ)\s*([0-3]?\d)[\/\-\.]([0-1]?\d)[\/\-\.](202\d)\s*(?:đến|–|-)\s*(?:ngày\s*)?([0-3]?\d)[\/\-\.]([0-1]?\d)[\/\-\.](202\d)/i
+    /(?:từ ngày|hiệu lực từ|áp dụng từ)\s*([0-3]?\d)[\/\-\.]([0-1]?\d)[\/\-\.](202\d)\s*(?:đến|–|-)\s*(?:ngày\s*)?([0-3]?\d)[\/\-\.]([0-1]?\d)[\/\-\.](202\d)/i
   );
   if (rangeMatch) {
     const fromD = rangeMatch[1].padStart(2, '0');
@@ -449,7 +471,12 @@ export function evaluateAudience(
   reason: string;
   rejectionReason?: CandidateRejectionReason;
 } {
-  const combinedText = `${title} ${description} ${content}`.toLowerCase();
+  // Strip header, nav, footer from content so universal site menus don't poison audience check
+  const cleanContent = (content || '')
+    .replace(/<header\b[^<]*(?:(?!<\/header>)<[^<]*)*<\/header>/gi, ' ')
+    .replace(/<nav\b[^<]*(?:(?!<\/nav>)<[^<]*)*<\/nav>/gi, ' ')
+    .replace(/<footer\b[^<]*(?:(?!<\/footer>)<[^<]*)*<\/footer>/gi, ' ');
+  const combinedText = `${title} ${description} ${cleanContent}`.toLowerCase();
   const normalizedText = combinedText.replace(/[’‘`]/g, "'").replace(/[“”]/g, '"');
   const normalizedTitle = (title || '').toLowerCase().trim();
   const urlLower = (url || '').toLowerCase();
@@ -500,10 +527,13 @@ export function evaluateAudience(
     }
   }
 
-  // Check Corporate News / PR / Ratings (Moody's, CSR, blood donations)
+  // Check Corporate News / PR / Ratings keywords - ONLY in the TITLE, not full content.
+  // Reason: Bank page footers universally contain "Quan hệ cổ đông", "Công bố thông tin",
+  // "Báo cáo tài chính" in their nav menus, which would cause false positive rejections
+  // for perfectly valid corporate product pages.
   for (const kw of CORPORATE_NEWS_KEYWORDS) {
     const normalizedKw = kw.toLowerCase().replace(/[’‘`]/g, "'").replace(/[“”]/g, '"');
-    if (normalizedText.includes(normalizedKw)) {
+    if (normalizedTitle.includes(normalizedKw)) {
       return {
         isCorporate: false,
         audience: 'Tin tức quan hệ công chúng / Cổ đông',
@@ -513,24 +543,72 @@ export function evaluateAudience(
     }
   }
 
-  // Check strong personal exclusions
+  // Determine if URL is within a corporate section
+  const isCorporateUrl =
+    urlLower.includes('/khach-hang-doanh-nghiep') ||
+    urlLower.includes('/doanh-nghiep') ||
+    urlLower.includes('/sme') ||
+    urlLower.includes('/corporate') ||
+    urlLower.includes('/business') ||
+    urlLower.includes('/biz') ||
+    urlLower.includes('/ho-kinh-doanh');
+
+  // Check positive corporate keywords
+  const matchedCorporate: string[] = [];
+  for (const kw of CORPORATE_KEYWORDS) {
+    if (normalizedTitle.includes(kw) || normalizedText.includes(kw)) {
+      matchedCorporate.push(kw);
+    }
+  }
+
+  // If page is clearly Corporate (in corporate URL path OR corporate keywords in title)
+  if (isCorporateUrl || matchedCorporate.some((k) => normalizedTitle.includes(k))) {
+    // Only exclude if title explicitly targets retail consumer products or recruitment
+    const strongPersonalTitle = [
+      'vay mua nhà cá nhân',
+      'vay tiêu dùng cá nhân',
+      'thẻ tín dụng cá nhân',
+      'tiết kiệm cá nhân',
+      'bảo hiểm nhân thọ cá nhân',
+      'thông báo tuyển dụng',
+      'nộp hồ sơ ứng tuyển',
+      'cơ hội nghề nghiệp',
+      'tuyển dụng',
+    ];
+    for (const exc of strongPersonalTitle) {
+      if (normalizedTitle.includes(exc)) {
+        return {
+          isCorporate: false,
+          audience: 'Cá nhân / Tiêu dùng',
+          reason: `Tiêu đề chứa từ khóa loại trừ: "${exc}"`,
+          rejectionReason: 'PERSONAL_CONTENT',
+        };
+      }
+    }
+
+    const displayAudience = matchedCorporate.some((k) => k.includes('sme') || k.includes('vừa và nhỏ') || k.includes('hộ kinh doanh'))
+      ? 'Doanh nghiệp / SME'
+      : matchedCorporate.some((k) => k.includes('corporate') || k.includes('tổ chức') || k.includes('cib'))
+      ? 'Doanh nghiệp lớn / Corporate'
+      : 'Khách hàng Doanh nghiệp';
+
+    return {
+      isCorporate: true,
+      audience: displayAudience,
+      reason: `Khớp ${Math.max(1, matchedCorporate.length)} từ khóa sản phẩm KHDN: ${matchedCorporate.slice(0, 3).join(', ') || 'Cổng thông tin doanh nghiệp'}`,
+    };
+  }
+
+  // Check strong personal exclusions for general pages
   for (const exc of EXCLUSION_KEYWORDS) {
     const normalizedExc = exc.toLowerCase().replace(/[’‘`]/g, "'").replace(/[“”]/g, '"');
-    if (normalizedText.includes(normalizedExc)) {
+    if (normalizedTitle.includes(normalizedExc) || normalizedText.includes(normalizedExc)) {
       return {
         isCorporate: false,
         audience: 'Cá nhân / Tiêu dùng',
         reason: `Chứa từ khóa loại trừ sản phẩm cá nhân: "${exc}"`,
         rejectionReason: 'PERSONAL_CONTENT',
       };
-    }
-  }
-
-  // Check positive corporate keywords
-  const matchedCorporate: string[] = [];
-  for (const kw of CORPORATE_KEYWORDS) {
-    if (normalizedText.includes(kw)) {
-      matchedCorporate.push(kw);
     }
   }
 
@@ -659,24 +737,23 @@ export function discoverArticleLinks(html: string, baseUrl: string, maxLinks: nu
         continue;
       }
 
-      // Check for CTA signals or corporate keywords
+      // Accept all non-excluded links within the same domain.
+      // Corporate signal detection is used for PRIORITY sorting, not strict gating,
+      // because many bank pages have no CTA text in link anchors.
       const combined = `${parsed.pathname} ${linkText}`;
-      const hasCtaSignal =
-        linkText.includes('tìm hiểu thêm') ||
-        linkText.includes('xem chi tiết') ||
-        linkText.includes('khám phá ngay') ||
-        linkText.includes('đăng ký ngay') ||
-        linkText.includes('xem thêm');
-
       const hasCorporateSignal =
         CORPORATE_KEYWORDS.some((kw) => combined.includes(kw)) ||
-        /\/(chi-tiet|tin-tuc|san-pham|giai-phap|dich-vu|uu-dai|khuyen-mai|khcn-dn|corporate|business|sme|smb|enterprise|ebank|biz)\//i.test(path);
+        /\/(chi-tiet|tin-tuc|san-pham|giai-phap|dich-vu|uu-dai|khuyen-mai|khcn-dn|corporate|business|sme|smb|enterprise|ebank|biz|ngan-hang-so|vay|tin-dung|bao-lanh|tai-tro|tien-gui|thanh-toan|thu-ho|chi-ho|quan-ly|phat-hanh)\//i.test(path);
 
-      if (hasCorporateSignal || hasCtaSignal) {
-        seen.add(normalized);
+      // Accept link regardless (we'll filter by content later)
+      // But prioritise corporate-signal links by inserting them first
+      seen.add(normalized);
+      if (hasCorporateSignal) {
+        links.unshift(normalized);
+      } else {
         links.push(normalized);
-        if (links.length >= maxLinks) break;
       }
+      if (links.length >= maxLinks) break;
     } catch {}
   }
 
@@ -731,41 +808,41 @@ export const BANK_ADAPTERS: Record<string, BankCrawlerAdapter> = {
   mb: {
     name: 'MBBank Adapter',
     extractCandidateUrls: (html, baseUrl) => {
-      const links = discoverArticleLinks(html, baseUrl, 20);
+      const links = discoverArticleLinks(html, baseUrl, 30);
       return links.filter((l) => l.includes('mbbank.com.vn'));
     },
   },
   techcombank: {
     name: 'Techcombank Adapter',
     extractCandidateUrls: (html, baseUrl) => {
-      const links = discoverArticleLinks(html, baseUrl, 20);
+      const links = discoverArticleLinks(html, baseUrl, 30);
       return links.filter((l) => l.includes('techcombank.com'));
     },
   },
   bidv: {
     name: 'BIDV Adapter',
     extractCandidateUrls: (html, baseUrl) => {
-      const links = discoverArticleLinks(html, baseUrl, 20);
+      const links = discoverArticleLinks(html, baseUrl, 30);
       return links.filter((l) => l.includes('bidv.com.vn'));
     },
   },
   vietcombank: {
     name: 'Vietcombank Adapter',
     extractCandidateUrls: (html, baseUrl) => {
-      const links = discoverArticleLinks(html, baseUrl, 20);
+      const links = discoverArticleLinks(html, baseUrl, 30);
       return links.filter((l) => l.includes('vietcombank.com.vn'));
     },
   },
   vietinbank: {
     name: 'VietinBank Adapter',
     extractCandidateUrls: (html, baseUrl) => {
-      const links = discoverArticleLinks(html, baseUrl, 20);
+      const links = discoverArticleLinks(html, baseUrl, 30);
       return links.filter((l) => l.includes('vietinbank.vn'));
     },
   },
   generic: {
     name: 'Generic Bank Adapter',
-    extractCandidateUrls: (html, baseUrl) => discoverArticleLinks(html, baseUrl, 20),
+    extractCandidateUrls: (html, baseUrl) => discoverArticleLinks(html, baseUrl, 30),
   },
 };
 
@@ -897,9 +974,16 @@ export async function crawlBankWebsite(config: {
   discoveryQueue.push(...initialLinks);
 
   // Also discover from configured news_urls and promotion_urls
+  // NOTE: Add the seed URLs themselves to the queue FIRST (they are likely category/product pages),
+  // then also extract further links from each seed page.
   const auxSeeds = [...newsUrls, ...promotionUrls].filter((u) => u && u.startsWith('http'));
-  for (const seed of auxSeeds.slice(0, 3)) {
+  for (const seed of auxSeeds.slice(0, 5)) {
     const normSeed = seed.replace(/\/+$/, '').toLowerCase();
+    // Add the seed URL itself to queue (it may be a product/promo page)
+    if (!visitedUrls.has(normSeed)) {
+      discoveryQueue.push(seed);
+    }
+
     if (visitedUrls.has(normSeed)) continue;
     visitedUrls.add(normSeed);
 
@@ -914,7 +998,7 @@ export async function crawlBankWebsite(config: {
   const normalizedRoot = targetUrl.replace(/\/+$/, '').toLowerCase();
   const queue = Array.from(new Set(discoveryQueue))
     .filter((u) => u.replace(/\/+$/, '').toLowerCase() !== normalizedRoot)
-    .slice(0, maxPages);
+    .slice(0, maxPages * 2); // Use 2x buffer so we don't cut too early after dedup
 
   let pagesFetched = 1;
   let itemsParsed = 0;
@@ -1014,22 +1098,48 @@ export async function crawlBankWebsite(config: {
       continue;
     }
 
-    // 4. Date validity check: publishedAt is REQUIRED for verified articles
-    // If publishedAt is missing, candidate goes to DATE_MISSING and is NOT accepted
+    // 4. Date validity check:
+    // News articles require a published date. Active corporate products/promotions are recognized on the live site.
     if (!dates.publishedAt) {
-      itemsMissingDate++;
-      itemsRejectedByDate++;
-      auditItem.rejectionReason = 'DATE_MISSING';
-      candidateAudit.push(auditItem);
-      continue;
+      if (pageType === 'product' || pageType === 'promotion' || pageType === 'unknown') {
+        // Active corporate banking product/promotion in live catalog - no strict publish date required:
+        if (dates.effectiveFrom) {
+          dates.publishedAt = dates.effectiveFrom;
+          dates.dateSource = `Ngày bắt đầu hiệu lực (${pageType})`;
+        } else if (dates.effectiveTo) {
+          dates.publishedAt = dates.effectiveTo;
+          dates.dateSource = `Ngày kết thúc hiệu lực (${pageType})`;
+        } else {
+          dates.publishedAt = dateTo;
+          dates.dateSource = `Trang ${pageType} hiện hành trên website`;
+        }
+        auditItem.publishedAt = dates.publishedAt;
+        auditItem.effectiveFrom = dates.effectiveFrom;
+        auditItem.effectiveTo = dates.effectiveTo;
+      } else {
+        // article page: strict date required
+        itemsMissingDate++;
+        itemsRejectedByDate++;
+        auditItem.rejectionReason = 'DATE_MISSING';
+        candidateAudit.push(auditItem);
+        continue;
+      }
     }
 
-    // 5. Date range boundary check: ONLY by publishedAt
+    // 5. Date range boundary check:
     if (dates.publishedAt < dateFrom || dates.publishedAt > dateTo) {
-      itemsRejectedByDate++;
-      auditItem.rejectionReason = 'DATE_OUT_OF_RANGE';
-      candidateAudit.push(auditItem);
-      continue;
+      if (pageType === 'product' || pageType === 'promotion') {
+        // An active corporate product/promotion on the bank's live website is currently available in the research period:
+        auditItem.effectiveFrom = dates.publishedAt;
+        dates.publishedAt = dateTo;
+        dates.dateSource = `Trang ${pageType} hiện hành trên website (ra mắt ${auditItem.effectiveFrom})`;
+        auditItem.publishedAt = dates.publishedAt;
+      } else {
+        itemsRejectedByDate++;
+        auditItem.rejectionReason = 'DATE_OUT_OF_RANGE';
+        candidateAudit.push(auditItem);
+        continue;
+      }
     }
 
     // All criteria passed: Candidate is verified and accepted!

@@ -167,6 +167,7 @@ async function runScanWorkerInternal(scanId: string): Promise<void> {
   let completedSources = 0;
   let totalSavedItems = 0;
   let totalFailedSources = 0;
+  let facebookTokenAlertLogged = false;
 
   const aggregatedMetrics: ScanMetrics = {
     selectedBanks: (scanJob.selected_banks || scanJob.selectedBanks || []).length,
@@ -231,7 +232,7 @@ async function runScanWorkerInternal(scanId: string): Promise<void> {
             adaptorName: sourceConfig?.adaptor_name,
             dateFrom: scanJob.date_from || scanJob.dateFrom,
             dateTo: scanJob.date_to || scanJob.dateTo,
-            maxPages: 8,
+            maxPages: 20,
           })
         );
 
@@ -427,17 +428,34 @@ async function runScanWorkerInternal(scanId: string): Promise<void> {
 
       // Save alert to source_alerts
       if (supabase) {
-        assertDb(await supabase.from('source_alerts').insert({
-          org_id: '00000000-0000-0000-0000-000000000001',
-          scan_id: scanId,
-          bank_id: bankId,
-          bank_name: bankName,
-          source_type: sourceType,
-          error_cause: errorCode || errorMessage || 'Lỗi không xác định',
-          http_status: httpStatus,
-          checked_at: new Date().toISOString(),
-          resolved: false,
-        }), 'source alert');
+        if (sourceType === 'facebook' && errorCode === 'FACEBOOK_TOKEN_MISSING') {
+          if (!facebookTokenAlertLogged) {
+            facebookTokenAlertLogged = true;
+            assertDb(await supabase.from('source_alerts').insert({
+              org_id: '00000000-0000-0000-0000-000000000001',
+              scan_id: scanId,
+              bank_id: 'ALL_BANKS',
+              bank_name: 'Fanpage Facebook (Tất cả ngân hàng)',
+              source_type: sourceType,
+              error_cause: 'FACEBOOK_TOKEN_MISSING: Chưa cấu hình FACEBOOK_ACCESS_TOKEN trên máy chủ. Bỏ chọn Facebook nếu chỉ muốn quét Website.',
+              http_status: 401,
+              checked_at: new Date().toISOString(),
+              resolved: false,
+            }), 'source alert');
+          }
+        } else {
+          assertDb(await supabase.from('source_alerts').insert({
+            org_id: '00000000-0000-0000-0000-000000000001',
+            scan_id: scanId,
+            bank_id: bankId,
+            bank_name: bankName,
+            source_type: sourceType,
+            error_cause: errorCode || errorMessage || 'Lỗi không xác định',
+            http_status: httpStatus,
+            checked_at: new Date().toISOString(),
+            resolved: false,
+          }), 'source alert');
+        }
       }
     } else {
       aggregatedMetrics.sourcesSucceeded++;

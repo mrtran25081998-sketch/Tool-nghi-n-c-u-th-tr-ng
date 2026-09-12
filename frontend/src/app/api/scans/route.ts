@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse, after } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { store } from '@/lib/store';
 import { runScanWorker } from '@/lib/crawler/scanWorker';
 
@@ -82,10 +82,11 @@ export async function POST(req: NextRequest) {
         throw new Error(`Worker từ chối lượt quét (HTTP ${workerResponse.status})`);
       }
     } else {
-      after(async () => {
-        await runScanWorker(job.id).catch((workerErr) => {
-          console.error('[Worker Error]', workerErr);
-        });
+      // Use a floating Promise (fire-and-forget) instead of after() which can be
+      // unreliable in local dev and some serverless environments. The worker updates
+      // Supabase directly, so the client polls for progress independently.
+      void runScanWorker(job.id).catch((workerErr: any) => {
+        console.error('[Worker Error]', workerErr);
       });
     }
 
