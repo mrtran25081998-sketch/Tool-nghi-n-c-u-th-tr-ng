@@ -945,12 +945,12 @@ class Store {
           }
           const dedupedInsert = Array.from(uniqueByJobHash.values());
 
-          // INSERT (not upsert): each scan's articles are independent rows with their own job_id.
-          // Upsert on content_hash was silently keeping old job_id from previous scans,
-          // causing new scans to return 0 items when querying by the new job_id.
-          const { error: insertErr } = await supabase.from('crawl_items').insert(dedupedInsert);
-          if (insertErr) {
-            console.warn('crawl_items insert warning:', insertErr.message, insertErr.code);
+          // Upsert with onConflict so existing items update their job_id to this latest scan
+          const { error: upsertErr } = await supabase.from('crawl_items').upsert(dedupedInsert, {
+            onConflict: 'org_id,bank_id,source_type,content_hash',
+          });
+          if (upsertErr) {
+            console.warn('crawl_items upsert warning:', upsertErr.message, upsertErr.code);
           }
         } catch (e) {
           console.warn('Supabase crawl_items insert error:', e);
