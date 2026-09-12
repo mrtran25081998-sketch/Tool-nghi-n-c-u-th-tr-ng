@@ -152,7 +152,60 @@ export default function SummaryPage() {
         throw new Error(json.error || 'Không thể khởi tạo lượt quét');
       }
 
-      const jobId = json.data.id;
+      const job: ScanJobDetail = json.data;
+      const jobId = job.id;
+
+      const onScanComplete = async (completedJob: ScanJobDetail, sourcePayload?: any) => {
+        if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+        setIsScanning(false);
+        setActiveScanId(null);
+        setScanProgress({
+          percent: 100,
+          stage: completedJob.currentStage || 'Quét hoàn tất!',
+          currentBankName: '',
+        });
+        setLastScanReport({
+          metrics: sourcePayload?.metrics || completedJob.metrics,
+          sourceResults: sourcePayload?.sourceResults || completedJob.sourceResults,
+          status: sourcePayload?.status || completedJob.status,
+        });
+
+        // Fetch verified scan results directly from results endpoint
+        let fetchedItems: IntelligenceItem[] = [];
+        try {
+          const resResults = await fetch(`/api/scans/${completedJob.id}/results?mode=${isLiveMode ? 'live' : 'demo'}`);
+          const jsonResults = await resResults.json();
+          if (jsonResults.success && Array.isArray(jsonResults.items)) {
+            fetchedItems = jsonResults.items;
+          }
+        } catch (e) {
+          console.error('Failed to fetch scan results', e);
+        }
+
+        if (fetchedItems.length === 0 && sourcePayload?.items && sourcePayload.items.length > 0) {
+          fetchedItems = sourcePayload.items;
+        }
+
+        const savedCount = (sourcePayload?.metrics || completedJob.metrics)?.itemsSaved || 0;
+        if (savedCount > 0 && fetchedItems.length === 0) {
+          showToast('Lỗi kỹ thuật: Dữ liệu đã lưu nhưng không đọc được (Data Contract Error)');
+          setLastScanReport((prev) => (prev ? { ...prev, status: 'data_contract_error' } : null));
+        } else {
+          setItems(fetchedItems);
+        }
+
+        showToast(
+          savedCount > 0
+            ? `🎉 Quét hoàn tất: Thu thập ${savedCount} nội dung doanh nghiệp!`
+            : 'Lượt quét hoàn thành (0 kết quả phù hợp với khoảng ngày/bộ lọc)'
+        );
+      };
+
+      if (['completed', 'success', 'partial', 'empty'].includes(job.status)) {
+        await onScanComplete(job, json);
+        return;
+      }
+
       setActiveScanId(jobId);
 
       // Start polling for progress
@@ -163,68 +216,31 @@ export default function SummaryPage() {
           const pollRes = await fetch(`/api/scans/${jobId}`);
           const pollJson = await pollRes.json();
           if (pollJson.data) {
-            const job: ScanJobDetail = pollJson.data;
+            const currentJob: ScanJobDetail = pollJson.data;
             setScanProgress({
-              percent: job.progressPercent,
-              stage: job.currentStage,
-              currentBankName: job.currentBankName,
+              percent: currentJob.progressPercent,
+              stage: currentJob.currentStage,
+              currentBankName: currentJob.currentBankName,
             });
 
-            if (['completed', 'success', 'partial', 'empty'].includes(job.status)) {
+            if (['completed', 'success', 'partial', 'empty'].includes(currentJob.status)) {
+              await onScanComplete(currentJob, pollJson);
+            } else if (currentJob.status === 'cancelled' || currentJob.status === 'failed') {
               if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
               setIsScanning(false);
               setActiveScanId(null);
               setLastScanReport({
-                metrics: pollJson.metrics || job.metrics,
-                sourceResults: pollJson.sourceResults || job.sourceResults,
-                status: pollJson.status || job.status,
+                metrics: pollJson.metrics || currentJob.metrics,
+                sourceResults: pollJson.sourceResults || currentJob.sourceResults,
+                status: pollJson.status || currentJob.status,
               });
-
-              // Fetch verified scan results directly from results endpoint
-              let fetchedItems: IntelligenceItem[] = [];
-              try {
-                const resResults = await fetch(`/api/scans/${jobId}/results?mode=${isLiveMode ? 'live' : 'demo'}`);
-                const jsonResults = await resResults.json();
-                if (jsonResults.success && Array.isArray(jsonResults.items)) {
-                  fetchedItems = jsonResults.items;
-                }
-              } catch (e) {
-                console.error('Failed to fetch scan results', e);
-              }
-
-              if (fetchedItems.length === 0 && pollJson.items && pollJson.items.length > 0) {
-                fetchedItems = pollJson.items;
-              }
-
-              const savedCount = (pollJson.metrics || job.metrics)?.itemsSaved || 0;
-              if (savedCount > 0 && fetchedItems.length === 0) {
-                showToast('Lỗi kỹ thuật: Dữ liệu đã lưu nhưng không đọc được (Data Contract Error)');
-                setLastScanReport((prev) => prev ? { ...prev, status: 'data_contract_error' } : null);
-              } else {
-                setItems(fetchedItems);
-              }
-
-              showToast(
-                savedCount > 0
-                  ? `🎉 Quét hoàn tất: Thu thập ${savedCount} nội dung doanh nghiệp!`
-                  : 'Lượt quét hoàn thành (0 kết quả phù hợp với khoảng ngày/bộ lọc)'
-              );
-            } else if (job.status === 'cancelled' || job.status === 'failed') {
-              if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
-              setIsScanning(false);
-              setActiveScanId(null);
-              setLastScanReport({
-                metrics: pollJson.metrics || job.metrics,
-                sourceResults: pollJson.sourceResults || job.sourceResults,
-                status: pollJson.status || job.status,
-              });
-              showToast(job.status === 'cancelled' ? 'Lượt quét đã bị hủy' : 'Lượt quét gặp lỗi');
+              showToast(currentJob.status === 'cancelled' ? 'Lượt quét đã bị hủy' : 'Lượt quét gặp lỗi');
             }
           }
         } catch (pollErr) {
           console.error('Polling error', pollErr);
         }
-      }, 600);
+      }, 1000);
     } catch (err: any) {
       setIsScanning(false);
       showToast(`Lỗi: ${err.message}`);
