@@ -52,7 +52,7 @@ class Store {
   private crawlJobs: CrawlJob[] = [];
   private crawlItems: CrawlItem[] = JSON.parse(JSON.stringify(INITIAL_CRAWL_ITEMS));
   private intelligenceItems: IntelligenceItem[] = JSON.parse(JSON.stringify(INITIAL_INTELLIGENCE_ITEMS));
-  private sourceAlerts: SourceAlert[] = JSON.parse(JSON.stringify(INITIAL_SOURCE_ALERTS));
+  private sourceAlerts: SourceAlert[] = [];
   private scanJobDetails: ScanJobDetail[] = [];
   private crawlSources: CrawlSource[] = [];
   private discoveredUrls: SourceDiscoveredUrl[] = [];
@@ -119,15 +119,7 @@ class Store {
         .eq('org_id', this.orgId)
         .order('display_order', { ascending: true });
       if (!error && data && data.length > 0) {
-        const dbBanks = data as Bank[];
-        const dbCodes = new Set(dbBanks.map((b) => (b.code || '').toUpperCase()));
-        const missingDefaults = this.banks.filter((b) => !dbCodes.has((b.code || '').toUpperCase()));
-        if (missingDefaults.length > 0) {
-          return [...dbBanks, ...missingDefaults].sort(
-            (a, b) => (a.display_order ?? 0) - (b.display_order ?? 0)
-          );
-        }
-        return dbBanks;
+        return data as Bank[];
       }
     }
     return [...this.banks].sort((a, b) => a.display_order - b.display_order);
@@ -246,35 +238,10 @@ class Store {
         .eq('org_id', this.orgId)
         .order('display_order', { ascending: true });
       if (!error && data && data.length > 0) {
-        const dbList = data.map((item: any) => ({
+        return data.map((item: any) => ({
           ...item,
-          bank_name: item.banks?.name || item.bank_name || 'Ngân hàng mới',
+          bank_name: item.banks?.name || item.bank_name || 'Ngân hàng',
         })) as SourcePair[];
-
-        // Normalize helper to compare bank names accurately
-        const norm = (s: string) =>
-          (s || '')
-            .toLowerCase()
-            .replace(/[^a-z0-9]/g, '')
-            .replace(/nganhang|bank|biz|business|efast|direct|neobiz|onebiz/g, '');
-
-        const dbBankNames = new Set(dbList.map((p) => norm(p.bank_name || '')));
-
-        const missingDefaults = this.sourcePairs.filter((defaultPair) => {
-          const defaultNormalized = norm(defaultPair.bank_name || '');
-          return (
-            !dbBankNames.has(defaultNormalized) &&
-            !dbList.some((db) => db.bank_id === defaultPair.bank_id)
-          );
-        });
-
-        if (missingDefaults.length > 0) {
-          return [...dbList, ...missingDefaults].sort(
-            (a, b) => (a.display_order ?? 0) - (b.display_order ?? 0)
-          );
-        }
-
-        return dbList;
       }
     }
     return [...this.sourcePairs].sort((a, b) => a.display_order - b.display_order);
@@ -461,9 +428,21 @@ class Store {
       }
     }
 
-    // 0. Scan ID filter if requested
+    // 0. Scan ID filter if requested - returns all items discovered by this scan job
     if (params?.scan_id) {
       items = items.filter((i) => i.scanId === params.scan_id);
+      const mode = params?.mode || 'live';
+      if (mode === 'live') {
+        items = items.filter((i) => !i.isDemo);
+      }
+      if (params?.status && params.status !== 'all' && params.status !== 'Tất cả') {
+        items = items.filter((i) => i.verificationStatus === params.status);
+      }
+      return items.sort((a, b) => {
+        if (!a.publishedAt) return 1;
+        if (!b.publishedAt) return -1;
+        return b.publishedAt.localeCompare(a.publishedAt);
+      });
     }
 
     // 1. Mode filter: Live Mode strictly requires authentic non-demo items
@@ -479,7 +458,7 @@ class Store {
       items = items.filter((i) => {
         // Items with missing publication date are classified as 'review'
         if (!i.publishedAt) {
-          return params.status === 'review' || params.status === 'all';
+          return params.status !== 'verified';
         }
         return i.publishedAt >= from && i.publishedAt <= to;
       });
@@ -592,7 +571,7 @@ class Store {
     selectedBanks: string[];
     sourceTypes: ('website' | 'facebook')[];
   }): Promise<ScanJobDetail> {
-    const id = 'scan-' + Date.now();
+    const id = crypto.randomUUID();
     const newJob: ScanJobDetail = {
       id,
       dateFrom: params.dateFrom,
@@ -619,10 +598,8 @@ class Store {
     const allBanks = await this.getBanks();
     const allSources = await this.getSourcePairs();
 
-    // Identify target banks
-    const bankTargets = allBanks.filter(
-      (b) => job.selectedBanks.includes(b.id) || job.selectedBanks.includes(b.name)
-    );
+    // Identify target banks by UUID
+    const bankTargets = allBanks.filter((b) => job.selectedBanks.includes(b.id));
     const targetList = bankTargets.length > 0 ? bankTargets : allBanks;
     const total = targetList.length;
 
@@ -635,6 +612,7 @@ class Store {
       pagesDiscovered: 0,
       pagesFetched: 0,
       itemsParsed: 0,
+      itemsAccepted: 0,
       itemsRejectedByDate: 0,
       itemsRejectedByAudience: 0,
       itemsMissingDate: 0,
@@ -652,9 +630,7 @@ class Store {
       if (!current || current.status === 'cancelled') return;
 
       const bank = targetList[idx];
-      const sourcePair = allSources.find(
-        (sp) => sp.bank_id === bank.id || sp.bank_name?.toLowerCase() === bank.name.toLowerCase()
-      );
+      const sourcePair = allSources.find((sp) => sp.bank_id === bank.id);
 
       const websiteUrl = sourcePair?.website_url || (bank as any).website_url || '';
       const facebookUrl = sourcePair?.facebook_url || (bank as any).facebook_url || '';
@@ -732,14 +708,18 @@ class Store {
           if (type === 'facebook') bankFacebookArticles = res.articles || [];
 
           // Add alert if source failed or unavailable
-          if (res.errorCode && res.errorCode !== 'INVALID_URL') {
+          if (res.errorCode) {
             this.sourceAlerts.unshift({
-              id: 'alert-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+              id: crypto.randomUUID(),
+              scanId: job.id,
               bankId: bank.id,
               bankName: bank.name,
               sourceType: type,
+              errorCode: res.errorCode,
+              errorMessage: res.errorMessage || res.errorCode,
               errorCause: res.errorMessage || res.errorCode,
               httpStatus: res.httpStatus || undefined,
+              sourceUrl: res.sourceUrl,
               checkedAt: new Date().toISOString(),
               resolved: false,
             });
@@ -826,6 +806,7 @@ class Store {
         await this.addIntelligenceItem(item);
         createdItems.push(item);
         metrics.itemsSaved++;
+        metrics.itemsAccepted++;
       }
     }
 
@@ -841,6 +822,9 @@ class Store {
       } else if (metrics.sourcesSucceeded === 0) {
         finalStatus = 'failed';
       }
+
+      metrics.itemsReturned = metrics.itemsSaved;
+      metrics.itemsRendered = metrics.itemsSaved;
 
       current.status = finalStatus;
       current.progressPercent = 100;
