@@ -446,6 +446,38 @@ export interface SourceAlert {
   resolved?: boolean;
 }
 
+export type PageType = 'landing' | 'category' | 'article' | 'product' | 'promotion' | 'invalid';
+
+export type CandidateRejectionReason =
+  | 'DATE_MISSING'
+  | 'DATE_OUT_OF_RANGE'
+  | 'PERSONAL_CONTENT'
+  | 'CORPORATE_NEWS'
+  | 'LANDING_PAGE'
+  | 'CATEGORY_PAGE'
+  | 'TITLE_INVALID'
+  | 'SOURCE_URL_INVALID'
+  | 'DUPLICATE'
+  | 'CONTENT_TOO_SHORT'
+  | 'NO_PRODUCT_CHANGE';
+
+export interface CandidateAuditItem {
+  id: string;
+  bankId: string;
+  bankName: string;
+  url: string;
+  title: string;
+  pageType: PageType;
+  publishedAt: string | null;
+  effectiveFrom?: string | null;
+  effectiveTo?: string | null;
+  audience: string;
+  contentType?: string;
+  httpStatus: number;
+  accepted: boolean;
+  rejectionReason?: CandidateRejectionReason | string | null;
+}
+
 export interface ScanMetrics {
   selectedBanks: number;
   selectedSources: number;
@@ -463,6 +495,11 @@ export interface ScanMetrics {
   itemsSaved: number;
   itemsReturned?: number;
   itemsRendered?: number;
+  candidatesFound?: number;
+  accepted?: number;
+  saved?: number;
+  returned?: number;
+  sourceErrors?: number;
 }
 
 export interface SourceExecutionResult {
@@ -491,6 +528,7 @@ export interface ScanJobDetail {
   totalFound: number;
   metrics?: ScanMetrics;
   sourceResults?: SourceExecutionResult[];
+  rejectedCandidates?: CandidateAuditItem[];
   errorSummary?: string;
   createdAt: string;
   finishedAt?: string;

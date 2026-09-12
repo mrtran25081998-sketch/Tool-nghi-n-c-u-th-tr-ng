@@ -51,11 +51,11 @@ export async function crawlBankFacebook(params: {
 
   // State B: Meta Graph API Token not configured in server environment
   if (!token) {
-    console.log(`[FacebookConnector] ℹ️ Token missing for ${params.bankName}. Marking source unavailable.`);
+    console.log(`[FacebookConnector] ℹ️ Token missing for ${params.bankName}. Marking source failed.`);
     return {
       sourceUrl: facebookUrl,
       httpStatus: 0,
-      status: 'unavailable',
+      status: 'failed',
       pagesDiscovered: 0,
       pagesFetched: 0,
       itemsParsed: 0,
@@ -65,7 +65,7 @@ export async function crawlBankFacebook(params: {
       articles: [],
       errorCode: 'FACEBOOK_TOKEN_MISSING',
       errorMessage:
-        'Chưa cấu hình FACEBOOK_ACCESS_TOKEN trên máy chủ. Vui lòng thêm token Meta Graph API để quét bài viết Fanpage chính thức.',
+        'Chưa cấu hình FACEBOOK_ACCESS_TOKEN trên máy chủ. Vui lòng kết nối Meta Graph API để quét Fanpage chính thức.',
     };
   }
 

@@ -14,11 +14,12 @@ import {
   Filter,
   Info,
 } from 'lucide-react';
-import { ScanMetrics, SourceExecutionResult } from '@/types';
+import { ScanMetrics, SourceExecutionResult, CandidateAuditItem } from '@/types';
 
 interface ScanDebugReportProps {
   metrics?: ScanMetrics;
   sourceResults?: SourceExecutionResult[];
+  rejectedCandidates?: CandidateAuditItem[];
   scanStatus?: string;
   totalItems: number;
 }
@@ -26,10 +27,12 @@ interface ScanDebugReportProps {
 export default function ScanDebugReport({
   metrics,
   sourceResults,
+  rejectedCandidates,
   scanStatus,
   totalItems,
 }: ScanDebugReportProps) {
   const [isOpen, setIsOpen] = useState(totalItems === 0);
+  const [reasonFilter, setReasonFilter] = useState<string>('all');
 
   if (!metrics && (!sourceResults || sourceResults.length === 0)) {
     return null;
@@ -268,6 +271,139 @@ export default function ScanDebugReport({
                         </td>
                       </tr>
                     ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Rejected Candidates Audit Table */}
+          {rejectedCandidates && rejectedCandidates.length > 0 && (
+            <div className="border border-[#e2e8f0] rounded-xl overflow-hidden mt-4">
+              <div className="px-4 py-2.5 bg-[#f8fafc] border-b border-[#e2e8f0] flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-[#334155]">
+                    Ứng viên bị loại qua các bước thẩm định ({rejectedCandidates.length} ứng viên)
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
+                    Audit Log
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Filter className="w-3 h-3 text-[#64748b]" />
+                  <select
+                    value={reasonFilter}
+                    onChange={(e) => setReasonFilter(e.target.value)}
+                    className="text-xs border border-[#cbd5e1] rounded-lg px-2 py-1 bg-white text-[#334155] focus:outline-none focus:border-[#1646d8]"
+                  >
+                    <option value="all">Tất cả lý do ({rejectedCandidates.length})</option>
+                    <option value="LANDING_PAGE">Trang chủ / Hub (Landing)</option>
+                    <option value="CATEGORY_PAGE">Trang danh mục (Category)</option>
+                    <option value="DATE_MISSING">Thiếu ngày (DATE_MISSING)</option>
+                    <option value="DATE_OUT_OF_RANGE">Ngoài khoảng lọc (DATE_OUT_OF_RANGE)</option>
+                    <option value="PERSONAL_CONTENT">Khách hàng cá nhân (PERSONAL)</option>
+                    <option value="CORPORATE_NEWS">Tin nội bộ / Xếp hạng (NEWS)</option>
+                    <option value="TITLE_INVALID">Tiêu đề không hợp lệ</option>
+                    <option value="SOURCE_URL_INVALID">URL lỗi</option>
+                  </select>
+                </div>
+              </div>
+              <div className="overflow-x-auto max-h-[340px] overflow-y-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-[#f1f5f9] text-[#475569] font-bold text-[11px] uppercase tracking-wider sticky top-0">
+                    <tr>
+                      <th className="px-3 py-2.5">Ngân hàng</th>
+                      <th className="px-2.5 py-2.5">Loại trang</th>
+                      <th className="px-3 py-2.5">Tiêu đề & URL</th>
+                      <th className="px-2.5 py-2.5">Ngày / Hiệu lực</th>
+                      <th className="px-2.5 py-2.5">Đối tượng</th>
+                      <th className="px-3 py-2.5">Lý do loại bỏ</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#edf2f7]">
+                    {rejectedCandidates
+                      .filter((c) => reasonFilter === 'all' || c.rejectionReason === reasonFilter)
+                      .map((cand, cIdx) => (
+                        <tr key={cIdx} className="hover:bg-[#fafcff] transition-colors">
+                          <td className="px-3 py-2 font-bold text-[#0f2357] whitespace-nowrap">
+                            {cand.bankName}
+                          </td>
+                          <td className="px-2.5 py-2 whitespace-nowrap">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                cand.pageType === 'landing'
+                                  ? 'bg-purple-100 text-purple-800'
+                                  : cand.pageType === 'category'
+                                  ? 'bg-indigo-100 text-indigo-800'
+                                  : cand.pageType === 'promotion'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : cand.pageType === 'product'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-slate-100 text-slate-700'
+                              }`}
+                            >
+                              {cand.pageType}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-[#334155] max-w-sm">
+                            <div className="font-semibold text-xs line-clamp-1" title={cand.title}>
+                              {cand.title}
+                            </div>
+                            <div className="text-[10px] text-blue-600 truncate max-w-xs font-mono">
+                              <a href={cand.url} target="_blank" rel="noopener noreferrer" className="hover:underline">
+                                {cand.url}
+                              </a>
+                            </div>
+                          </td>
+                          <td className="px-2.5 py-2 whitespace-nowrap text-[11px] font-mono">
+                            {cand.publishedAt ? (
+                              <span className="text-slate-700">{cand.publishedAt}</span>
+                            ) : cand.effectiveTo ? (
+                              <span className="text-amber-700 font-semibold" title="Thời hạn ưu đãi">
+                                Hết hạn: {cand.effectiveTo}
+                              </span>
+                            ) : (
+                              <span className="text-[#94a3b8]">Chưa rõ ngày</span>
+                            )}
+                          </td>
+                          <td className="px-2.5 py-2 text-[11px] text-[#475569] whitespace-nowrap">
+                            {cand.audience || '—'}
+                          </td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                cand.rejectionReason === 'LANDING_PAGE'
+                                  ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                                  : cand.rejectionReason === 'CATEGORY_PAGE'
+                                  ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                                  : cand.rejectionReason === 'DATE_MISSING'
+                                  ? 'bg-gray-100 text-gray-700 border border-gray-300'
+                                  : cand.rejectionReason === 'DATE_OUT_OF_RANGE'
+                                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                  : cand.rejectionReason === 'PERSONAL_CONTENT'
+                                  ? 'bg-red-50 text-red-700 border border-red-200'
+                                  : cand.rejectionReason === 'CORPORATE_NEWS'
+                                  ? 'bg-slate-100 text-slate-700 border border-slate-300'
+                                  : 'bg-orange-50 text-orange-700 border border-orange-200'
+                              }`}
+                            >
+                              {cand.rejectionReason === 'LANDING_PAGE'
+                                ? 'Trang chủ / Cổng thông tin'
+                                : cand.rejectionReason === 'CATEGORY_PAGE'
+                                ? 'Trang danh mục chung'
+                                : cand.rejectionReason === 'DATE_MISSING'
+                                ? 'Không có ngày đăng'
+                                : cand.rejectionReason === 'DATE_OUT_OF_RANGE'
+                                ? 'Ngoài khoảng thời gian'
+                                : cand.rejectionReason === 'PERSONAL_CONTENT'
+                                ? 'Nội dung KH cá nhân'
+                                : cand.rejectionReason === 'CORPORATE_NEWS'
+                                ? 'Tin nội bộ / Xếp hạng'
+                                : cand.rejectionReason || 'Không phù hợp'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
                   </tbody>
                 </table>
               </div>

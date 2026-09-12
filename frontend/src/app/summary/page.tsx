@@ -49,6 +49,7 @@ export default function SummaryPage() {
   const [lastScanReport, setLastScanReport] = useState<{
     metrics?: ScanMetrics;
     sourceResults?: SourceExecutionResult[];
+    rejectedCandidates?: CandidateAuditItem[];
     status?: string;
   } | null>(null);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -131,6 +132,8 @@ export default function SummaryPage() {
   const handleStartScan = async () => {
     try {
       setIsScanning(true);
+      // Strict Scan Isolation: Clear previous scan items and report immediately!
+      setItems([]);
       setScanProgress({ percent: 5, stage: 'Đang khởi tạo lượt quét...' });
 
       const res = await fetch('/api/scans', {
@@ -167,6 +170,7 @@ export default function SummaryPage() {
         setLastScanReport({
           metrics: sourcePayload?.metrics || completedJob.metrics,
           sourceResults: sourcePayload?.sourceResults || completedJob.sourceResults,
+          rejectedCandidates: sourcePayload?.rejectedCandidates || completedJob.rejectedCandidates,
           status: sourcePayload?.status || completedJob.status,
         });
 
@@ -177,6 +181,9 @@ export default function SummaryPage() {
           const jsonResults = await resResults.json();
           if (jsonResults.success && Array.isArray(jsonResults.items)) {
             fetchedItems = jsonResults.items;
+          }
+          if (jsonResults.rejectedCandidates && (!sourcePayload?.rejectedCandidates || sourcePayload.rejectedCandidates.length === 0)) {
+            setLastScanReport((prev) => (prev ? { ...prev, rejectedCandidates: jsonResults.rejectedCandidates } : null));
           }
         } catch (e) {
           console.error('Failed to fetch scan results', e);
@@ -194,6 +201,8 @@ export default function SummaryPage() {
           setItems(fetchedItems);
         }
 
+        loadAlerts();
+
         showToast(
           savedCount > 0
             ? `🎉 Quét hoàn tất: Thu thập ${savedCount} nội dung doanh nghiệp!`
@@ -203,6 +212,19 @@ export default function SummaryPage() {
 
       if (['completed', 'success', 'partial', 'empty'].includes(job.status)) {
         await onScanComplete(job, json);
+        return;
+      } else if (job.status === 'failed') {
+        setIsScanning(false);
+        setActiveScanId(null);
+        setItems([]);
+        setLastScanReport({
+          metrics: json.metrics || job.metrics,
+          sourceResults: json.sourceResults || job.sourceResults,
+          rejectedCandidates: json.rejectedCandidates || job.rejectedCandidates,
+          status: 'failed',
+        });
+        loadAlerts();
+        showToast('Lượt quét thất bại (Không có nguồn nào kết nối thành công)');
         return;
       }
 
@@ -229,12 +251,16 @@ export default function SummaryPage() {
               if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
               setIsScanning(false);
               setActiveScanId(null);
+              // Strict Scan Isolation: Keep items empty on failure
+              setItems([]);
               setLastScanReport({
                 metrics: pollJson.metrics || currentJob.metrics,
                 sourceResults: pollJson.sourceResults || currentJob.sourceResults,
+                rejectedCandidates: pollJson.rejectedCandidates || currentJob.rejectedCandidates,
                 status: pollJson.status || currentJob.status,
               });
-              showToast(currentJob.status === 'cancelled' ? 'Lượt quét đã bị hủy' : 'Lượt quét gặp lỗi');
+              loadAlerts();
+              showToast(currentJob.status === 'cancelled' ? 'Lượt quét đã bị hủy' : 'Lượt quét thất bại (16 nguồn lỗi Facebook Token)');
             }
           }
         } catch (pollErr) {
@@ -344,6 +370,7 @@ export default function SummaryPage() {
         items={items}
         totalSelectedBanks={selectedBankIds.length}
         alerts={alerts}
+        sourceErrors={lastScanReport?.metrics?.sourceErrors ?? lastScanReport?.metrics?.sourcesFailed}
         isLoadingBanks={isLoadingBanks}
       />
 
@@ -358,6 +385,7 @@ export default function SummaryPage() {
       <ScanDebugReport
         metrics={lastScanReport?.metrics}
         sourceResults={lastScanReport?.sourceResults}
+        rejectedCandidates={lastScanReport?.rejectedCandidates}
         scanStatus={lastScanReport?.status}
         totalItems={items.length}
       />

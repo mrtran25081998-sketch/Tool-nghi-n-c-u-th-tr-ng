@@ -53,11 +53,13 @@ export async function GET(
       },
       items,
       sourceResults: job.sourceResults || [],
+      rejectedCandidates: job.rejectedCandidates || [],
       alerts,
       // Backward compatibility alias for UI consumers expecting json.data
       data: {
         ...job,
         items,
+        rejectedCandidates: job.rejectedCandidates || [],
       },
     };
 

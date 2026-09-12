@@ -36,6 +36,8 @@ export async function GET(
       status: job.status,
       items,
       alerts,
+      sourceResults: job.sourceResults || [],
+      rejectedCandidates: job.rejectedCandidates || [],
       metrics: {
         ...job.metrics,
         itemsReturned: items.length,

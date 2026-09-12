@@ -70,7 +70,7 @@ async function cleanAndPush() {
   const sha = await git.commit({
     fs,
     dir: rootDir,
-    message: 'fix(crawler): resolve Vercel build errors, enforce strict date bounds, block personal/investor news, and clean results',
+    message: 'fix(summary): implement scan isolation, candidate audit logging, strict date separation, and landing page handling',
     author: {
       name: 'mrtran25081998-sketch',
       email: 'tranngocgioi.work@gmail.com',

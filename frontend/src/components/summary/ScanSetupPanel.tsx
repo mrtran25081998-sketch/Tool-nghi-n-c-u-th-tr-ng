@@ -14,6 +14,9 @@ import {
   Sparkles,
   AlertCircle,
   Loader2,
+  HelpCircle,
+  X,
+  Info,
 } from 'lucide-react';
 import { Bank } from '@/types';
 
@@ -62,6 +65,7 @@ export default function ScanSetupPanel({
 }: ScanSetupPanelProps) {
   const [bankSearch, setBankSearch] = useState('');
   const [isBankDropdownOpen, setIsBankDropdownOpen] = useState(false);
+  const [showMetaApiModal, setShowMetaApiModal] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
   // Filter banks by search
@@ -361,20 +365,30 @@ export default function ScanSetupPanel({
               Website
             </label>
 
-            <label className="flex items-center gap-1.5 text-xs text-[#344054] font-medium cursor-pointer">
-              <input
-                type="checkbox"
-                checked={scanSources.facebook}
-                onChange={(e) => {
-                  setValidationError(null);
-                  onScanSourcesChange({ ...scanSources, facebook: e.target.checked });
-                }}
-                disabled={isScanning}
-                className="w-4 h-4 rounded text-[#1646d8] focus:ring-[#1646d8]"
-              />
-              <Radio className="w-3.5 h-3.5 text-indigo-600" />
-              Facebook
-            </label>
+            <div className="flex items-center gap-1.5">
+              <label className="flex items-center gap-1.5 text-xs text-[#344054] font-medium cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={scanSources.facebook}
+                  onChange={(e) => {
+                    setValidationError(null);
+                    onScanSourcesChange({ ...scanSources, facebook: e.target.checked });
+                  }}
+                  disabled={isScanning}
+                  className="w-4 h-4 rounded text-[#1646d8] focus:ring-[#1646d8]"
+                />
+                <Radio className="w-3.5 h-3.5 text-indigo-600" />
+                Facebook
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowMetaApiModal(true)}
+                title="Thông tin kết nối Meta Graph API"
+                className="text-[#98a2b3] hover:text-[#1646d8] transition-colors p-0.5 cursor-pointer"
+              >
+                <HelpCircle className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -428,6 +442,50 @@ export default function ScanSetupPanel({
           )}
         </div>
       </div>
+
+      {/* Meta Graph API Guidance Modal */}
+      {showMetaApiModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl border border-[#d9e2f2] shadow-2xl max-w-md w-full p-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-[#edf2f9]">
+              <div className="flex items-center gap-2 text-sm font-bold text-[#0f2357]">
+                <Info className="w-4.5 h-4.5 text-indigo-600" />
+                Kết nối Meta Graph API cho Fanpage
+              </div>
+              <button
+                onClick={() => setShowMetaApiModal(false)}
+                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="py-4 text-xs text-[#475569] space-y-3 leading-relaxed">
+              <p>
+                Để quét bài đăng từ Fanpage Facebook ngân hàng chính thức tuân thủ chính sách bảo mật, hệ thống kết nối trực tiếp qua <strong>Meta Graph API</strong>.
+              </p>
+              <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-[11.5px]">
+                <strong>Trạng thái máy chủ:</strong> Nếu chưa cấu hình <code>FACEBOOK_ACCESS_TOKEN</code> trong biến môi trường, lượt quét Facebook sẽ báo lỗi <code>FACEBOOK_TOKEN_MISSING</code> (16 nguồn lỗi) và không hiển thị dữ liệu cũ.
+              </div>
+              <div>
+                <strong className="text-[#0f2357] block mb-1">Cách thiết lập trên Vercel:</strong>
+                <ol className="list-decimal pl-4 space-y-1 text-[11.5px]">
+                  <li>Đăng ký App tại <code>developers.facebook.com</code>.</li>
+                  <li>Tạo System User Token hoặc Page Access Token có quyền đọc công khai.</li>
+                  <li>Thêm biến <code>FACEBOOK_ACCESS_TOKEN</code> vào Project Settings &gt; Environment Variables.</li>
+                </ol>
+              </div>
+            </div>
+            <div className="pt-3 border-t border-[#edf2f9] flex justify-end">
+              <button
+                onClick={() => setShowMetaApiModal(false)}
+                className="px-4 py-2 bg-[#1646d8] text-white text-xs font-bold rounded-xl cursor-pointer"
+              >
+                Đã hiểu
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

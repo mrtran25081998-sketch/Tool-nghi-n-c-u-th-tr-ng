@@ -25,6 +25,7 @@ import type {
   ScanJobDetail,
   ScanMetrics,
   SourceExecutionResult,
+  CandidateAuditItem,
 } from '../types/index.ts';
 import { crawlBankWebsite } from './crawler/serverCrawler';
 import { crawlBankFacebook } from './crawler/facebookConnector';
@@ -692,6 +693,7 @@ class Store {
     };
     const sourceResults: SourceExecutionResult[] = [];
     const createdItems: IntelligenceItem[] = [];
+    const allCandidateAudit: CandidateAuditItem[] = [];
 
     job.metrics = metrics;
     job.sourceResults = sourceResults;
@@ -724,7 +726,7 @@ class Store {
             corporateHomepageUrl: websiteUrl,
             dateFrom: job.dateFrom,
             dateTo: job.dateTo,
-            maxPages: 4,
+            maxPages: 6,
           }).then((res) => ({ type: 'website' as const, res }))
         );
       }
@@ -757,6 +759,10 @@ class Store {
           metrics.itemsRejectedByDate += res.itemsRejectedByDate || 0;
           metrics.itemsRejectedByAudience += res.itemsRejectedByAudience || 0;
           metrics.itemsMissingDate += res.itemsMissingDate || 0;
+
+          if (res.candidateAudit && Array.isArray(res.candidateAudit)) {
+            allCandidateAudit.push(...res.candidateAudit);
+          }
 
           if (res.status === 'success' || res.status === 'partial') {
             metrics.sourcesSucceeded++;
@@ -973,13 +979,24 @@ class Store {
         finalStatus = 'failed';
       }
 
+      metrics.sourceErrors = sourceResults.filter((s) => s.status === 'failed' || s.status === 'unavailable').length;
+      metrics.candidatesFound = allCandidateAudit.length;
+      metrics.accepted = metrics.itemsAccepted;
+      metrics.saved = metrics.itemsSaved;
+      metrics.returned = metrics.itemsSaved;
       metrics.itemsReturned = metrics.itemsSaved;
       metrics.itemsRendered = metrics.itemsSaved;
+
+      const rejected = allCandidateAudit.filter((c) => !c.accepted);
+      current.rejectedCandidates = rejected;
+      job.rejectedCandidates = rejected;
 
       current.status = finalStatus;
       current.progressPercent = 100;
       current.currentStage =
-        metrics.itemsSaved > 0
+        finalStatus === 'failed'
+          ? `Lượt quét thất bại (${metrics.sourceErrors} nguồn lỗi). Không có dữ liệu để thu thập.`
+          : metrics.itemsSaved > 0
           ? `Đã hoàn tất quét! Thu thập thành công ${metrics.itemsSaved} bản ghi doanh nghiệp.`
           : `Lượt quét hoàn thành nhưng không tìm thấy nội dung phù hợp trong khoảng ngày.`;
       current.finishedAt = new Date().toISOString();
@@ -1000,6 +1017,7 @@ class Store {
               sourceTypes: current.sourceTypes,
               metrics: current.metrics,
               sourceResults: current.sourceResults,
+              rejectedCandidates: current.rejectedCandidates,
               finishedAt: current.finishedAt,
             }),
             finished_at: new Date().toISOString(),
@@ -1040,6 +1058,7 @@ class Store {
             finishedAt: data.finished_at,
             metrics: meta.metrics,
             sourceResults: meta.sourceResults || [],
+            rejectedCandidates: meta.rejectedCandidates || [],
           };
           this.scanJobDetails.push(reconstructed);
           return reconstructed;

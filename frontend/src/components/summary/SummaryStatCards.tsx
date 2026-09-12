@@ -8,6 +8,7 @@ interface SummaryStatCardsProps {
   items: IntelligenceItem[];
   totalSelectedBanks: number;
   alerts: SourceAlert[];
+  sourceErrors?: number;
   isLoadingBanks?: boolean;
 }
 
@@ -15,6 +16,7 @@ export default function SummaryStatCards({
   items,
   totalSelectedBanks,
   alerts,
+  sourceErrors,
   isLoadingBanks = false,
 }: SummaryStatCardsProps) {
   // 1. Total results
@@ -29,7 +31,8 @@ export default function SummaryStatCards({
 
   // 4. Review count + alert errors
   const reviewCount = items.filter((i) => i.verificationStatus === 'review').length;
-  const totalReviewAndAlerts = reviewCount + alerts.length;
+  const sourceErrorsCount = typeof sourceErrors === 'number' ? sourceErrors : alerts.length;
+  const totalReviewAndAlerts = reviewCount + sourceErrorsCount;
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
@@ -107,7 +110,7 @@ export default function SummaryStatCards({
             {totalReviewAndAlerts}
           </div>
           <div className="text-[11px] text-[#667085]">
-            {reviewCount} mục rà soát • {alerts.length} nguồn lỗi
+            {reviewCount} mục rà soát • {sourceErrorsCount} nguồn lỗi
           </div>
         </div>
         <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
