@@ -18,7 +18,29 @@ export async function GET(req: NextRequest) {
     }
     const deduplicatedAlerts = Array.from(alertMap.values());
 
-    return NextResponse.json({ success: true, data: deduplicatedAlerts });
+    // Consolidate any FACEBOOK_TOKEN_MISSING into a single alert
+    let hasFbTokenAlert = false;
+    const finalAlerts: typeof rawAlerts = [];
+    for (const alert of deduplicatedAlerts) {
+      const isFbMissing =
+        alert.sourceType === 'facebook' &&
+        (alert.errorCause?.includes('FACEBOOK_TOKEN_MISSING') || alert.errorMessage?.includes('FACEBOOK_TOKEN_MISSING'));
+      if (isFbMissing) {
+        if (!hasFbTokenAlert) {
+          hasFbTokenAlert = true;
+          finalAlerts.push({
+            ...alert,
+            bankId: 'ALL_BANKS',
+            bankName: 'Fanpage Facebook (Tất cả ngân hàng)',
+            errorMessage: 'Chưa cấu hình FACEBOOK_ACCESS_TOKEN trên máy chủ. Bỏ chọn Facebook nếu chỉ muốn quét Website.',
+          });
+        }
+      } else {
+        finalAlerts.push(alert);
+      }
+    }
+
+    return NextResponse.json({ success: true, data: finalAlerts });
   } catch (error: any) {
     return NextResponse.json({ success: false, error: error.message }, { status: 500 });
   }

@@ -123,8 +123,7 @@ export default function SummaryPage() {
 
   useEffect(() => {
     loadBanks();
-    loadAlerts();
-  }, [loadBanks, loadAlerts]);
+  }, [loadBanks]);
 
   useEffect(() => {
     loadResults();
@@ -134,8 +133,10 @@ export default function SummaryPage() {
   const handleStartScan = async () => {
     try {
       setIsScanning(true);
-      // Strict Scan Isolation: Clear previous scan items and report immediately!
+      // Strict Scan Isolation: Clear previous scan items, alerts, and report immediately!
       setItems([]);
+      setAlerts([]);
+      setLastScanReport(null);
       setScanProgress({ percent: 5, stage: 'Đang khởi tạo lượt quét...' });
 
       const res = await fetch('/api/scans', {
