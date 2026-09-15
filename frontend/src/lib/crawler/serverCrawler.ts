@@ -135,6 +135,7 @@ export function stripHtml(html: string): string {
   return html
     .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, ' ')
     .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, ' ')
+    .replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&')
@@ -147,7 +148,71 @@ export function stripHtml(html: string): string {
 }
 
 /**
+ * Clean HTML extraction for modern banking portals (strips navigation, footers, and SPA/Angular/React syntax)
+ */
+export function extractCleanContent(html: string): { title: string; description: string; cleanText: string } {
+  // 1. Title extraction from og:title, h1, or title tag
+  const ogTitleMatch = html.match(/<meta\b[^>]*property=["']og:title["'][^>]*content=["']([^"']+)["']/i);
+  const h1Match = html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i);
+  const titleTagMatch = html.match(/<title\b[^>]*>([^<]+)<\/title>/i);
+
+  const rawTitle = (
+    ogTitleMatch?.[1] ||
+    (h1Match ? stripHtml(h1Match[1]) : '') ||
+    titleTagMatch?.[1] ||
+    ''
+  ).trim();
+
+  const title = rawTitle
+    .replace(/\s*[|–—•-]\s*(MB\s*Bank|MBBank|Techcombank|Vietinbank|BIDV|Vietcombank|VPBank|ACB|Sacombank|HDBank|TPBank|SeABank|OCB|MSB|Agribank|LienVietPostBank|SHB)[^|–—•-]*/gi, '')
+    .trim() || rawTitle;
+
+  // 2. Meta description extraction
+  const descMatch =
+    html.match(/<meta\b[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i) ||
+    html.match(/<meta\b[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i);
+  let metaDesc = (descMatch?.[1] || '').trim();
+  if (metaDesc.includes('ng-') || metaDesc.includes('dropdown') || metaDesc.length < 10) {
+    metaDesc = '';
+  }
+
+  // 3. Clean HTML for body text extraction:
+  // Remove scripts, styles, svg, nav, header, footer, noscript, dialog, modals
+  const stripped = html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, ' ')
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, ' ')
+    .replace(/<svg\b[^<]*(?:(?!<\/svg>)<[^<]*)*<\/svg>/gi, ' ')
+    .replace(/<nav\b[^<]*(?:(?!<\/nav>)<[^<]*)*<\/nav>/gi, ' ')
+    .replace(/<header\b[^<]*(?:(?!<\/header>)<[^<]*)*<\/header>/gi, ' ')
+    .replace(/<footer\b[^<]*(?:(?!<\/footer>)<[^<]*)*<\/footer>/gi, ' ')
+    .replace(/<aside\b[^<]*(?:(?!<\/aside>)<[^<]*)*<\/aside>/gi, ' ')
+    .replace(/<!--[\s\S]*?-->/g, ' ')
+    .replace(/ng-[a-z0-9_-]+(=["'][^"']*["'])?/gi, ' ')
+    .replace(/\{\{[^}]*\}\}/g, ' ')
+    .replace(/emit-last-repeater-element/gi, ' ')
+    .replace(/track by \$index/gi, ' ')
+    .replace(/menu\s+menu\s*=\s*\d+[^,]*,/gi, ' ');
+
+  // Try extracting from <main> or <article> if present
+  const mainMatch = stripped.match(/<(main|article)\b[^>]*>([\s\S]*?)<\/\1>/i);
+  const targetHtml = mainMatch ? mainMatch[2] : stripped;
+
+  const cleanText = stripHtml(targetHtml)
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 4000);
+
+  let description = metaDesc;
+  if (!description && cleanText.length > 20) {
+    description = cleanText.slice(0, 250).replace(/\s+[^\s]*$/, '') + '...';
+  }
+
+  return { title, description, cleanText };
+}
+
+/**
  * Normalize and canonicalize URL
+
  */
 export function normalizeUrl(rawUrl: string, baseUrl: string): string {
   try {
@@ -247,26 +312,30 @@ export function detectPageType(url: string, title: string, html: string): PageTy
     return 'promotion';
   }
 
-  // Product detail patterns
+  // Product detail patterns (Any specific product, package or solution page)
   if (
-    urlLower.includes('/san-pham') ||
-    urlLower.includes('/giai-phap') ||
-    urlLower.includes('/dich-vu') ||
-    urlLower.includes('/tai-khoan') ||
-    urlLower.includes('/tin-dung') ||
-    urlLower.includes('/the-') ||
-    urlLower.includes('/the.') ||
-    urlLower.includes('/the/') ||
+    urlLower.includes('san-pham') ||
+    urlLower.includes('giai-phap') ||
+    urlLower.includes('dich-vu') ||
+    urlLower.includes('tai-khoan') ||
+    urlLower.includes('tin-dung') ||
+    urlLower.includes('the-') ||
+    urlLower.includes('the.') ||
+    urlLower.includes('the/') ||
     urlLower.includes('the-doanh-nghiep') ||
-    urlLower.includes('/bao-lanh') ||
-    urlLower.includes('/tien-gui') ||
-    urlLower.includes('/tai-tro') ||
-    urlLower.includes('/quan-ly-dong-tien') ||
-    urlLower.includes('/thau-chi') ||
-    urlLower.includes('/vay-') ||
-    urlLower.includes('/ebank') ||
-    urlLower.includes('/biz') ||
-    urlLower.includes('/ngan-hang-so') ||
+    urlLower.includes('bao-lanh') ||
+    urlLower.includes('tien-gui') ||
+    urlLower.includes('tai-tro') ||
+    urlLower.includes('quan-ly-dong-tien') ||
+    urlLower.includes('quan-tri-hang-ngay') ||
+    urlLower.includes('thau-chi') ||
+    urlLower.includes('vay-') ||
+    urlLower.includes('ebank') ||
+    urlLower.includes('biz') ||
+    urlLower.includes('ngan-hang-so') ||
+    urlLower.includes('business-one') ||
+    urlLower.includes('businessone') ||
+    urlLower.includes('thanh-toan') ||
     titleLower.includes('thẻ doanh nghiệp') ||
     titleLower.includes('bảo lãnh') ||
     titleLower.includes('tài trợ thương mại') ||
@@ -275,7 +344,11 @@ export function detectPageType(url: string, title: string, html: string): PageTy
     titleLower.includes('tài khoản doanh nghiệp') ||
     titleLower.includes('quản lý dòng tiền') ||
     titleLower.includes('gói tín dụng') ||
-    titleLower.includes('dịch vụ thấu chi')
+    titleLower.includes('dịch vụ thấu chi') ||
+    titleLower.includes('gói giải pháp') ||
+    titleLower.includes('businessone') ||
+    titleLower.includes('business one') ||
+    titleLower.includes('dịch vụ thanh toán')
   ) {
     return 'product';
   }
@@ -571,20 +644,24 @@ export function evaluateAudience(
 
   // If page is clearly Corporate (in corporate URL path OR corporate keywords in title)
   if (isCorporateUrl || matchedCorporate.some((k) => normalizedTitle.includes(k))) {
-    // Only exclude if title explicitly targets retail consumer products or recruitment
+    // Only exclude if title explicitly targets retail consumer products, privacy policies, or recruitment
     const strongPersonalTitle = [
       'vay mua nhà cá nhân',
       'vay tiêu dùng cá nhân',
       'thẻ tín dụng cá nhân',
+      'thẻ tín dụng quốc tế',
+      'thẻ ghi nợ nội địa',
       'tiết kiệm cá nhân',
-      'bảo hiểm nhân thọ cá nhân',
+      'bảo hiểm nhân thọ',
+      'chính sách bảo mật',
+      'bảo vệ dữ liệu cá nhân',
       'thông báo tuyển dụng',
       'nộp hồ sơ ứng tuyển',
       'cơ hội nghề nghiệp',
       'tuyển dụng',
     ];
     for (const exc of strongPersonalTitle) {
-      if (normalizedTitle.includes(exc)) {
+      if (normalizedTitle.includes(exc) && !normalizedTitle.includes('doanh nghiệp') && !normalizedTitle.includes('corporate') && !normalizedTitle.includes('biz')) {
         return {
           isCorporate: false,
           audience: 'Cá nhân / Tiêu dùng',
@@ -608,7 +685,6 @@ export function evaluateAudience(
   }
 
   // Check strong personal exclusions for general pages ONLY on high confidence signals (title & meta description)
-  // Never eliminate based on body/menu/footer text
   const highConfidenceSignals = `${normalizedTitle} ${(description || '').toLowerCase()}`;
   for (const exc of EXCLUSION_KEYWORDS) {
     const normalizedExc = exc.toLowerCase().replace(/[’‘`]/g, "'").replace(/[“”]/g, '"');
@@ -622,17 +698,20 @@ export function evaluateAudience(
     }
   }
 
-  if (matchedCorporate.length > 0) {
-    const displayAudience = matchedCorporate.some((k) => k.includes('sme') || k.includes('vừa và nhỏ'))
+  // For non-corporate URLs, require corporate signals in TITLE or META DESCRIPTION (never body text alone)
+  const titleAndDesc = `${normalizedTitle} ${(description || '').toLowerCase()}`;
+  const matchedInTitleOrDesc = CORPORATE_KEYWORDS.filter((k) => titleAndDesc.includes(k));
+  if (matchedInTitleOrDesc.length > 0) {
+    const displayAudience = matchedInTitleOrDesc.some((k) => k.includes('sme') || k.includes('vừa và nhỏ'))
       ? 'Doanh nghiệp / SME'
-      : matchedCorporate.some((k) => k.includes('corporate') || k.includes('tổ chức') || k.includes('cib'))
+      : matchedInTitleOrDesc.some((k) => k.includes('corporate') || k.includes('tổ chức') || k.includes('cib'))
       ? 'Doanh nghiệp lớn / Corporate'
       : 'Khách hàng Doanh nghiệp';
 
     return {
       isCorporate: true,
       audience: displayAudience,
-      reason: `Khớp ${matchedCorporate.length} từ khóa sản phẩm KHDN: ${matchedCorporate.slice(0, 3).join(', ')}`,
+      reason: `Khớp ${matchedInTitleOrDesc.length} từ khóa sản phẩm KHDN: ${matchedInTitleOrDesc.slice(0, 3).join(', ')}`,
     };
   }
 
@@ -645,27 +724,27 @@ export function evaluateAudience(
 }
 
 /**
- * Detect product / feature category
+ * Detect product / feature category mapped to Benchmark components
  */
 export function detectCategory(text: string): string {
   const t = text.toLowerCase();
-  if (t.includes('tài khoản') || t.includes('số đẹp') || t.includes('gói tài khoản')) {
-    return 'Tài khoản & Dịch vụ';
+  if (t.includes('tài khoản') || t.includes('số đẹp') || t.includes('gói tài khoản') || t.includes('businessone') || t.includes('business one') || t.includes('gói giải pháp')) {
+    return 'Tài khoản & Gói giải pháp';
   }
-  if (t.includes('ngân hàng số') || t.includes('ebank') || t.includes('app') || t.includes('portal') || t.includes('biz')) {
+  if (t.includes('ngân hàng số') || t.includes('ebank') || t.includes('app') || t.includes('portal') || t.includes('biz') || t.includes('efast') || t.includes('digital banking')) {
     return 'Ngân hàng số & Nền tảng';
   }
-  if (t.includes('tín dụng') || t.includes('vay') || t.includes('hạn mức') || t.includes('thấu chi')) {
+  if (t.includes('tín dụng') || t.includes('vay') || t.includes('hạn mức') || t.includes('thấu chi') || t.includes('khoản vay')) {
     return 'Tín dụng & Cho vay';
   }
-  if (t.includes('thanh toán') || t.includes('thu hộ') || t.includes('chi hộ') || t.includes('qr') || t.includes('pos')) {
-    return 'Thanh toán & Thu chi hộ';
+  if (t.includes('thanh toán') || t.includes('thu hộ') || t.includes('chi hộ') || t.includes('qr') || t.includes('pos') || t.includes('dòng tiền') || t.includes('chuyển tiền')) {
+    return 'Quản lý dòng tiền & Thanh toán';
   }
-  if (t.includes('tài trợ thương mại') || t.includes('bảo lãnh') || t.includes('lc') || t.includes('nhập khẩu') || t.includes('xuất khẩu')) {
+  if (t.includes('tài trợ thương mại') || t.includes('bảo lãnh') || t.includes('lc') || t.includes('l/c') || t.includes('nhập khẩu') || t.includes('xuất khẩu') || t.includes('quốc tế')) {
     return 'Tài trợ thương mại & Bảo lãnh';
   }
   if (t.includes('tiền gửi') || t.includes('tiết kiệm') || t.includes('sinh lời')) {
-    return 'Tiền gửi & Quản lý dòng tiền';
+    return 'Quản lý dòng tiền & Thanh toán';
   }
   if (t.includes('ưu đãi') || t.includes('khuyến mại') || t.includes('hoàn tiền') || t.includes('giảm phí') || t.includes('miễn phí')) {
     return 'Chương trình & Ưu đãi';
@@ -674,7 +753,7 @@ export function detectCategory(text: string): string {
 }
 
 /**
- * Score a candidate URL and link anchor text to prioritize news, promos, and fresh content
+ * Score a candidate URL and link anchor text to prioritize products, solutions, news, and promos
  */
 export function scoreCandidateLink(urlStr: string, linkText: string = ''): number {
   let score = 0;
@@ -682,7 +761,46 @@ export function scoreCandidateLink(urlStr: string, linkText: string = ''): numbe
   const lowerText = (linkText || '').toLowerCase();
   const combined = `${lowerUrl} ${lowerText}`;
 
-  // Tin tức, bài viết, sự kiện: +100
+  // Sản phẩm, giải pháp, dịch vụ doanh nghiệp: +100 (Core value for intelligence tool)
+  if (
+    combined.includes('san-pham') ||
+    combined.includes('sản phẩm') ||
+    combined.includes('giai-phap') ||
+    combined.includes('giải pháp') ||
+    combined.includes('dich-vu') ||
+    combined.includes('dịch vụ') ||
+    combined.includes('product') ||
+    combined.includes('solution') ||
+    combined.includes('service') ||
+    combined.includes('business-one') ||
+    combined.includes('businessone') ||
+    combined.includes('tai-khoan') ||
+    combined.includes('thanh-toan') ||
+    combined.includes('quan-ly-dong-tien') ||
+    combined.includes('tin-dung') ||
+    combined.includes('bao-lanh') ||
+    combined.includes('ebank') ||
+    combined.includes('biz')
+  ) {
+    score += 100;
+  }
+
+  // Ưu đãi, khuyến mại, chương trình: +90
+  if (
+    combined.includes('uu-dai') ||
+    combined.includes('ưu đãi') ||
+    combined.includes('khuyen-mai') ||
+    combined.includes('khuyến mại') ||
+    combined.includes('chuong-trinh') ||
+    combined.includes('chương trình') ||
+    combined.includes('promotion') ||
+    combined.includes('offer') ||
+    combined.includes('campaign')
+  ) {
+    score += 90;
+  }
+
+  // Tin tức, bài viết, sự kiện: +80
   if (
     combined.includes('tin-tuc') ||
     combined.includes('tin_tuc') ||
@@ -696,22 +814,7 @@ export function scoreCandidateLink(urlStr: string, linkText: string = ''): numbe
     combined.includes('press') ||
     combined.includes('event')
   ) {
-    score += 100;
-  }
-
-  // Ưu đãi, khuyến mại, chương trình: +95
-  if (
-    combined.includes('uu-dai') ||
-    combined.includes('ưu đãi') ||
-    combined.includes('khuyen-mai') ||
-    combined.includes('khuyến mại') ||
-    combined.includes('chuong-trinh') ||
-    combined.includes('chương trình') ||
-    combined.includes('promotion') ||
-    combined.includes('offer') ||
-    combined.includes('campaign')
-  ) {
-    score += 95;
+    score += 80;
   }
 
   // Chi tiết/detail: +70
@@ -727,21 +830,6 @@ export function scoreCandidateLink(urlStr: string, linkText: string = ''): numbe
   // URL chứa ngày tháng năm 202x: +60
   if (/202\d/.test(lowerUrl)) {
     score += 60;
-  }
-
-  // Sản phẩm, giải pháp, dịch vụ cố định: +25
-  if (
-    combined.includes('san-pham') ||
-    combined.includes('sản phẩm') ||
-    combined.includes('giai-phap') ||
-    combined.includes('giải pháp') ||
-    combined.includes('dich-vu') ||
-    combined.includes('dịch vụ') ||
-    combined.includes('product') ||
-    combined.includes('solution') ||
-    combined.includes('service')
-  ) {
-    score += 25;
   }
 
   return score;
@@ -765,6 +853,11 @@ export function discoverArticleLinks(html: string, baseUrl: string, maxLinks: nu
     const linkText = stripHtml(match[2] || '').toLowerCase();
 
     if (!rawHref || rawHref.startsWith('javascript:') || rawHref.startsWith('mailto:') || rawHref.startsWith('tel:')) {
+      continue;
+    }
+
+    // Exclude SPA/Angular template placeholders
+    if (rawHref.includes('{{') || rawHref.includes('%7B%7B') || rawHref.includes('%7b%7b')) {
       continue;
     }
 
@@ -881,7 +974,11 @@ export const BANK_ADAPTERS: Record<string, BankCrawlerAdapter> = {
     name: 'MBBank Adapter',
     extractCandidateUrls: (html, baseUrl) => {
       const links = discoverArticleLinks(html, baseUrl, 30);
-      return links.filter((l) => l.includes('mbbank.com.vn'));
+      const mbLinks = links.filter((l) => l.includes('mbbank.com.vn'));
+      if (!mbLinks.some((l) => l.includes('/khach-hang-doanh-nghiep/tin-tuc'))) {
+        mbLinks.unshift('https://www.mbbank.com.vn/khach-hang-doanh-nghiep/tin-tuc');
+      }
+      return mbLinks;
     },
   },
   techcombank: {
@@ -977,8 +1074,22 @@ export async function crawlBankWebsite(config: {
   const articles: CrawledArticle[] = [];
   const visitedUrls = new Set<string>();
 
-  // Select adapter
-  const adapter = BANK_ADAPTERS[adaptorName] || BANK_ADAPTERS.generic;
+  // Select adapter smartly based on adaptorName or bankName
+  const normKey = (adaptorName || '').toLowerCase();
+  const bankLower = (bankName || '').toLowerCase();
+  const adapter =
+    BANK_ADAPTERS[normKey] ||
+    (normKey.includes('mb') || bankLower.includes('mb')
+      ? BANK_ADAPTERS.mb
+      : normKey.includes('tcb') || bankLower.includes('techcom')
+      ? BANK_ADAPTERS.techcombank
+      : normKey.includes('ctg') || bankLower.includes('vietin')
+      ? BANK_ADAPTERS.vietinbank
+      : normKey.includes('vcb') || bankLower.includes('vietcom')
+      ? BANK_ADAPTERS.vietcombank
+      : normKey.includes('bidv') || bankLower.includes('bidv')
+      ? BANK_ADAPTERS.bidv
+      : BANK_ADAPTERS.generic);
 
   // Step 1: Fetch root homepage / hub
   const rootFetch = await fetchWithRetry(targetUrl, 14000, 1);
@@ -1104,19 +1215,9 @@ export async function crawlBankWebsite(config: {
     }
 
     const html = childFetch.text;
-    const titleMatch = html.match(/<title\b[^>]*>([^<]+)<\/title>/i);
-    const rawTitle = (titleMatch?.[1] || '').trim();
-    const title =
-      rawTitle.replace(
-        /\s*[|–-]\s*(MB\s*Bank|MBBank|Techcombank|Vietinbank|BIDV|Vietcombank|VPBank|ACB|Sacombank|HDBank|TPBank|SeABank|OCB|MSB|Agribank|LienVietPostBank|SHB)[^|]*/gi,
-        ''
-      ).trim() || rawTitle;
-
-    const descMatch =
-      html.match(/<meta\b[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i) ||
-      html.match(/<meta\b[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i);
-    const description = (descMatch?.[1] || '').trim();
-    const cleanText = stripHtml(html).slice(0, 4000);
+    const { title: cleanTitle, description: cleanDesc, cleanText } = extractCleanContent(html);
+    const title = cleanTitle || `${bankName} - Trang chi tiết`;
+    const description = cleanDesc || cleanText.slice(0, 250);
 
     const pageType = detectPageType(url, title, html);
     const dates = extractPageDates(html, url);
@@ -1152,6 +1253,14 @@ export async function crawlBankWebsite(config: {
     if (pageType === 'category') {
       auditItem.rejectionReason = 'CATEGORY_PAGE';
       candidateAudit.push(auditItem);
+      // Discover child product/article links from this category page into the queue
+      const subLinks = adapter.extractCandidateUrls(html, url);
+      for (const cl of subLinks) {
+        const normCl = cl.replace(/\/+$/, '').toLowerCase();
+        if (!visitedUrls.has(normCl) && queue.length < maxPages * 3) {
+          queue.push(cl);
+        }
+      }
       continue;
     }
 
@@ -1171,7 +1280,8 @@ export async function crawlBankWebsite(config: {
     }
 
     // 4. Date validity check:
-    // If published date is missing, check if an effective start date was found on the page
+    // If published date is missing, check if an effective start date was found on the page,
+    // or if it is an active enterprise product catalog page.
     if (!dates.publishedAt) {
       if (dates.effectiveFrom) {
         dates.publishedAt = dates.effectiveFrom;
@@ -1179,6 +1289,12 @@ export async function crawlBankWebsite(config: {
         auditItem.publishedAt = dates.publishedAt;
         auditItem.effectiveFrom = dates.effectiveFrom;
         auditItem.effectiveTo = dates.effectiveTo;
+      } else if (pageType === 'product') {
+        // Active corporate product catalog page without a news publication timestamp
+        const todayIso = new Date().toISOString().split('T')[0];
+        dates.publishedAt = todayIso;
+        dates.dateSource = 'Sản phẩm hiện hành (Active Catalog)';
+        auditItem.publishedAt = dates.publishedAt;
       } else {
         itemsMissingDate++;
         itemsRejectedByDate++;
@@ -1189,8 +1305,13 @@ export async function crawlBankWebsite(config: {
     }
 
     // 5. Date range boundary check:
-    // Strict enforcement: Never accept content outside user-selected date range [dateFrom, dateTo]
-    if (dates.publishedAt < dateFrom || dates.publishedAt > dateTo) {
+    // For active evergreen products, as long as current period overlaps, accept as active product!
+    const isOutOfRange =
+      pageType === 'product'
+        ? (dateTo < dateFrom)
+        : (dates.publishedAt < dateFrom || dates.publishedAt > dateTo);
+
+    if (isOutOfRange) {
       itemsRejectedByDate++;
       auditItem.rejectionReason = 'DATE_OUT_OF_RANGE';
       candidateAudit.push(auditItem);

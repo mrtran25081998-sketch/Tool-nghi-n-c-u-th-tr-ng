@@ -257,51 +257,77 @@ async function runScanWorkerInternal(scanId: string): Promise<void> {
           // Persist verified items
           for (const art of webResult.articles) {
             if (supabase) {
-              const { data: itemData, error: itemErr } = await supabase.from('crawl_items').upsert(
-                {
-                  org_id: '00000000-0000-0000-0000-000000000001',
-                  scan_id: scanId,
-                  bank_id: bankId,
-                  bank_name: bankName,
-                  source_type: 'website',
-                  source_url: art.url,
-                  canonical_url: art.url,
-                  title: art.title,
-                  summary: art.description || art.content.slice(0, 250),
-                  category: art.category,
-                  audience: art.audience,
-                  published_at: art.publishedAt,
-                  effective_from: art.effectiveFrom,
-                  effective_to: art.effectiveTo,
-                  date_source: art.dateSource,
-                  verification_status: 'verified',
-                  confidence_score: art.confidenceScore,
-                  evidence_text: art.content.slice(0, 500),
-                  website_url: art.url,
-                  source_types: ['website'],
-                  content_hash: art.url,
-                  status: 'accepted',
-                  collected_at: new Date().toISOString(),
-                },
-                { onConflict: 'scan_id,bank_id,canonical_url' }
-              ).select('id').single();
+              const hash = Buffer.from(art.url || crypto.randomUUID()).toString('base64url');
+              const itemPayload = {
+                org_id: '00000000-0000-0000-0000-000000000001',
+                scan_id: scanId,
+                bank_id: bankId,
+                bank_name: bankName,
+                source_type: 'website',
+                source_url: art.url,
+                canonical_url: art.url,
+                title: art.title,
+                summary: art.description || art.content.slice(0, 250),
+                category: art.category,
+                audience: art.audience,
+                published_at: art.publishedAt,
+                effective_from: art.effectiveFrom,
+                effective_to: art.effectiveTo,
+                date_source: art.dateSource,
+                verification_status: 'verified',
+                confidence_score: art.confidenceScore,
+                evidence_text: art.content.slice(0, 500),
+                website_url: art.url,
+                source_types: ['website'],
+                content_hash: hash,
+                status: 'accepted',
+                collected_at: new Date().toISOString(),
+              };
 
-              if (itemErr) throw new Error(`DATABASE_WRITE_FAILED (website item): ${itemErr.message}`);
-              if (!itemData?.id) throw new Error('DATABASE_WRITE_FAILED (website item): missing id');
-              const sourceWrite = await supabase.from('crawl_item_sources').upsert(
-                  {
-                    crawl_item_id: itemData.id,
-                    scan_id: scanId,
-                    source_type: 'website',
-                    url: art.url,
-                    title: art.title,
-                    published_at: art.publishedAt ? new Date(art.publishedAt).toISOString() : null,
-                    evidence_text: art.content.slice(0, 300),
-                    is_verified: true,
-                  },
-                  { onConflict: 'crawl_item_id,source_type,url' }
-                );
-              assertDb(sourceWrite, 'website item source');
+              const { data: existingItem } = await supabase
+                .from('crawl_items')
+                .select('id')
+                .eq('scan_id', scanId)
+                .eq('canonical_url', art.url)
+                .maybeSingle();
+
+              let itemRowId: string;
+              if (existingItem?.id) {
+                itemRowId = existingItem.id;
+                const { error: upErr } = await supabase.from('crawl_items').update(itemPayload).eq('id', itemRowId);
+                if (upErr) throw new Error(`DATABASE_WRITE_FAILED (website item update): ${upErr.message}`);
+              } else {
+                const { data: inserted, error: inErr } = await supabase.from('crawl_items').insert(itemPayload).select('id').single();
+                if (inErr) throw new Error(`DATABASE_WRITE_FAILED (website item insert): ${inErr.message}`);
+                if (!inserted?.id) throw new Error('DATABASE_WRITE_FAILED (website item): missing id');
+                itemRowId = inserted.id;
+              }
+
+              const sourcePayload = {
+                crawl_item_id: itemRowId,
+                scan_id: scanId,
+                source_type: 'website',
+                url: art.url,
+                title: art.title,
+                published_at: art.publishedAt ? new Date(art.publishedAt).toISOString() : null,
+                evidence_text: art.content.slice(0, 300),
+                is_verified: true,
+              };
+
+              const { data: existingSource } = await supabase
+                .from('crawl_item_sources')
+                .select('id')
+                .eq('crawl_item_id', itemRowId)
+                .eq('source_type', 'website')
+                .eq('url', art.url)
+                .maybeSingle();
+
+              if (existingSource?.id) {
+                await supabase.from('crawl_item_sources').update(sourcePayload).eq('id', existingSource.id);
+              } else {
+                const sourceWrite = await supabase.from('crawl_item_sources').insert(sourcePayload);
+                assertDb(sourceWrite, 'website item source');
+              }
             }
             itemsFound++;
             totalSavedItems++;
@@ -361,52 +387,78 @@ async function runScanWorkerInternal(scanId: string): Promise<void> {
           crawlSuccess = true;
           for (const art of fbResult.articles) {
             if (supabase) {
-              const { data: itemData, error: itemErr } = await supabase.from('crawl_items').upsert(
-                {
-                  org_id: '00000000-0000-0000-0000-000000000001',
-                  scan_id: scanId,
-                  bank_id: bankId,
-                  bank_name: bankName,
-                  source_type: 'facebook',
-                  source_url: art.url,
-                  canonical_url: art.url,
-                  title: art.title,
-                  summary: art.description || art.content.slice(0, 250),
-                  category: art.category,
-                  audience: art.audience,
-                  published_at: art.publishedAt,
-                  effective_from: art.effectiveFrom,
-                  effective_to: art.effectiveTo,
-                  date_source: art.dateSource,
-                  verification_status: 'verified',
-                  confidence_score: art.confidenceScore,
-                  evidence_text: art.content.slice(0, 500),
-                  facebook_url: art.url,
-                  source_types: ['facebook'],
-                  content_hash: art.url,
-                  status: 'accepted',
-                  collected_at: new Date().toISOString(),
-                },
-                { onConflict: 'scan_id,bank_id,canonical_url' }
-              ).select('id').single();
+              const hash = Buffer.from(art.url || crypto.randomUUID()).toString('base64url');
+              const itemPayload = {
+                org_id: '00000000-0000-0000-0000-000000000001',
+                scan_id: scanId,
+                bank_id: bankId,
+                bank_name: bankName,
+                source_type: 'facebook',
+                source_url: art.url,
+                canonical_url: art.url,
+                title: art.title,
+                summary: art.description || art.content.slice(0, 250),
+                category: art.category,
+                audience: art.audience,
+                published_at: art.publishedAt,
+                effective_from: art.effectiveFrom,
+                effective_to: art.effectiveTo,
+                date_source: art.dateSource,
+                verification_status: 'verified',
+                confidence_score: art.confidenceScore,
+                evidence_text: art.content.slice(0, 500),
+                facebook_url: art.url,
+                source_types: ['facebook'],
+                content_hash: hash,
+                status: 'accepted',
+                collected_at: new Date().toISOString(),
+              };
 
-              if (itemErr) throw new Error(`DATABASE_WRITE_FAILED (facebook item): ${itemErr.message}`);
-              if (!itemData?.id) throw new Error('DATABASE_WRITE_FAILED (facebook item): missing id');
-              const sourceWrite = await supabase.from('crawl_item_sources').upsert(
-                  {
-                    crawl_item_id: itemData.id,
-                    scan_id: scanId,
-                    source_type: 'facebook',
-                    url: art.url,
-                    permalink_url: art.url,
-                    title: art.title,
-                    published_at: art.publishedAt ? new Date(art.publishedAt).toISOString() : null,
-                    evidence_text: art.content.slice(0, 300),
-                    is_verified: true,
-                  },
-                  { onConflict: 'crawl_item_id,source_type,url' }
-                );
-              assertDb(sourceWrite, 'facebook item source');
+              const { data: existingItem } = await supabase
+                .from('crawl_items')
+                .select('id')
+                .eq('scan_id', scanId)
+                .eq('canonical_url', art.url)
+                .maybeSingle();
+
+              let itemRowId: string;
+              if (existingItem?.id) {
+                itemRowId = existingItem.id;
+                const { error: upErr } = await supabase.from('crawl_items').update(itemPayload).eq('id', itemRowId);
+                if (upErr) throw new Error(`DATABASE_WRITE_FAILED (facebook item update): ${upErr.message}`);
+              } else {
+                const { data: inserted, error: inErr } = await supabase.from('crawl_items').insert(itemPayload).select('id').single();
+                if (inErr) throw new Error(`DATABASE_WRITE_FAILED (facebook item insert): ${inErr.message}`);
+                if (!inserted?.id) throw new Error('DATABASE_WRITE_FAILED (facebook item): missing id');
+                itemRowId = inserted.id;
+              }
+
+              const sourcePayload = {
+                crawl_item_id: itemRowId,
+                scan_id: scanId,
+                source_type: 'facebook',
+                url: art.url,
+                permalink_url: art.url,
+                title: art.title,
+                published_at: art.publishedAt ? new Date(art.publishedAt).toISOString() : null,
+                evidence_text: art.content.slice(0, 300),
+                is_verified: true,
+              };
+
+              const { data: existingSource } = await supabase
+                .from('crawl_item_sources')
+                .select('id')
+                .eq('crawl_item_id', itemRowId)
+                .eq('source_type', 'facebook')
+                .eq('url', art.url)
+                .maybeSingle();
+
+              if (existingSource?.id) {
+                await supabase.from('crawl_item_sources').update(sourcePayload).eq('id', existingSource.id);
+              } else {
+                const sourceWrite = await supabase.from('crawl_item_sources').insert(sourcePayload);
+                assertDb(sourceWrite, 'facebook item source');
+              }
             }
             itemsFound++;
             totalSavedItems++;
