@@ -581,7 +581,6 @@ export function evaluateAudience(
     '/tin-khuyen-mai-khcn',
     '/khcn',
     '-khcn',
-    '/tin-mb/',
     '/quan-he-co-dong',
     '/documents',
     '/bieu-phi',
@@ -1153,22 +1152,17 @@ export async function crawlBankWebsite(config: {
 
   // Step 2: Discover candidate links from root + configured news/promo pages
   const discoveryQueue: string[] = [];
-  const initialLinks = adapter.extractCandidateUrls(rootFetch.text, targetUrl);
-  discoveryQueue.push(...initialLinks);
 
   // Also discover from configured news_urls and promotion_urls
-  // NOTE: Add the seed URLs themselves to the queue FIRST (they are likely category/product pages),
-  // then also extract further links from each seed page.
+  // NOTE: Add configured seed URLs FIRST so they take top priority in the queue
   const auxSeeds = [...newsUrls, ...promotionUrls].filter((u) => u && u.startsWith('http'));
+  const crawledParentSeeds = new Set<string>();
   for (const seed of auxSeeds.slice(0, 5)) {
     const normSeed = seed.replace(/\/+$/, '').toLowerCase();
-    // Add the seed URL itself to queue (it may be a product/promo page)
-    if (!visitedUrls.has(normSeed)) {
-      discoveryQueue.push(seed);
-    }
+    discoveryQueue.push(seed);
 
-    if (visitedUrls.has(normSeed)) continue;
-    visitedUrls.add(normSeed);
+    if (crawledParentSeeds.has(normSeed)) continue;
+    crawledParentSeeds.add(normSeed);
 
     const auxFetch = await fetchWithRetry(seed, 10000, 1);
     if (auxFetch.ok && auxFetch.text) {
@@ -1176,6 +1170,9 @@ export async function crawlBankWebsite(config: {
       discoveryQueue.push(...auxLinks);
     }
   }
+
+  const initialLinks = adapter.extractCandidateUrls(rootFetch.text, targetUrl);
+  discoveryQueue.push(...initialLinks);
 
   // Deduplicate candidate queue
   const normalizedRoot = targetUrl.replace(/\/+$/, '').toLowerCase();

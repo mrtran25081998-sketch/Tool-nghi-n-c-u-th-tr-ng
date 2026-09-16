@@ -25,12 +25,12 @@ export async function testFacebookTokenAndPage(params: {
   facebookPageId?: string;
   facebookUrl?: string;
 }): Promise<{ ok: boolean; status: string; message: string; httpStatus: number }> {
-  const token = process.env.FACEBOOK_ACCESS_TOKEN;
+  const token = process.env.FACEBOOK_ACCESS_TOKEN || process.env.META_GRAPH_ACCESS_TOKEN;
   if (!token) {
     return {
       ok: false,
       status: 'UNAVAILABLE (FACEBOOK_TOKEN_MISSING)',
-      message: 'Chưa cấu hình FACEBOOK_ACCESS_TOKEN trên máy chủ',
+      message: 'Chưa cấu hình FACEBOOK_ACCESS_TOKEN hoặc META_GRAPH_ACCESS_TOKEN trên máy chủ',
       httpStatus: 0,
     };
   }
@@ -87,7 +87,7 @@ export async function crawlBankFacebook(params: {
   dateTo: string;
 }): Promise<FacebookCrawlResult> {
   const { facebookUrl, facebookPageId, dateFrom, dateTo } = params;
-  const token = process.env.FACEBOOK_ACCESS_TOKEN;
+  const token = process.env.FACEBOOK_ACCESS_TOKEN || process.env.META_GRAPH_ACCESS_TOKEN;
   const apiVersion = process.env.FACEBOOK_GRAPH_API_VERSION || 'v19.0';
 
   if (!facebookUrl || !facebookUrl.startsWith('http')) {

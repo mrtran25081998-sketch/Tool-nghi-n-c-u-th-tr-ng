@@ -37,7 +37,7 @@ export const CANONICAL_BANKS = [
     is_mb: false,
     active: true,
     display_order: 2,
-    website_url: 'https://vietinbank.vn/vi/khach-hang-doanh-nghiep',
+    website_url: 'https://www.vietinbank.vn/doanh-nghiep',
     facebook_url: 'https://www.facebook.com/VietinBank',
   },
   {
@@ -48,7 +48,7 @@ export const CANONICAL_BANKS = [
     is_mb: false,
     active: true,
     display_order: 3,
-    website_url: 'https://www.bidv.com.vn/vi/khach-hang-doanh-nghiep',
+    website_url: 'https://bidv.com.vn/vn/doanh-nghiep/',
     facebook_url: 'https://www.facebook.com/BIDVbankvietnam',
   },
   {
@@ -114,7 +114,7 @@ export const CANONICAL_BANKS = [
     is_mb: false,
     active: true,
     display_order: 9,
-    website_url: 'https://tpb.vn/khach-hang-doanh-nghiep',
+    website_url: 'https://tpb.vn/doanh-nghiep',
     facebook_url: 'https://www.facebook.com/TPBank',
   },
   {
@@ -180,7 +180,7 @@ export const CANONICAL_BANKS = [
     is_mb: false,
     active: true,
     display_order: 15,
-    website_url: 'https://www.vietcombank.com.vn/vi-VN/KH-DN',
+    website_url: 'https://www.vietcombank.com.vn/vi-VN/To-chuc/SMEs',
     facebook_url: 'https://www.facebook.com/vietcombank',
   },
 ];
