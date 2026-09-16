@@ -70,7 +70,7 @@ async function cleanAndPush() {
   const sha = await git.commit({
     fs,
     dir: rootDir,
-    message: 'fix(summary): implement scan isolation, candidate audit logging, strict date separation, and landing page handling',
+    message: 'fix(crawler): resolve INVALID_URL, SOURCE_TIMEOUT and HTTP_403 across all 16 banks with concurrency and WAF bypass',
     author: {
       name: 'mrtran25081998-sketch',
       email: 'tranngocgioi.work@gmail.com',

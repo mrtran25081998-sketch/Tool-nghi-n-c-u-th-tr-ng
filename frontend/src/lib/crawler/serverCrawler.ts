@@ -918,6 +918,47 @@ export function discoverArticleLinks(html: string, baseUrl: string, maxLinks: nu
     } catch {}
   }
 
+  // Also support markdown links [text](url) when page is fetched via reader proxy
+  const mdRegex = /\[([^\]]+)\]\((https?:\/\/[^\s\)]+)\)/gi;
+  let mdMatch;
+  while ((mdMatch = mdRegex.exec(html)) !== null) {
+    const linkText = stripHtml(mdMatch[1] || '').toLowerCase();
+    const rawHref = mdMatch[2].trim();
+
+    if (!rawHref || rawHref.startsWith('javascript:') || rawHref.startsWith('mailto:') || rawHref.startsWith('tel:')) {
+      continue;
+    }
+    if (/\.(pdf|docx?|xlsx?|pptx?|zip|rar|png|jpe?g|gif|svg|webp|css|js)$/i.test(rawHref)) {
+      continue;
+    }
+
+    const normalized = normalizeUrl(rawHref, baseUrl);
+    if (seen.has(normalized)) continue;
+
+    try {
+      const parsed = new URL(normalized);
+      const parsedDomain = getRegistrableDomain(parsed.hostname);
+      if (parsedDomain !== baseDomain) continue;
+
+      const path = parsed.pathname.toLowerCase().replace(/\/+$/, '');
+      if (
+        !path ||
+        path === '' ||
+        path === '/home' ||
+        path.includes('login') ||
+        path.includes('/khach-hang-ca-nhan') ||
+        path.includes('/ca-nhan/') ||
+        path.includes('/personal')
+      ) {
+        continue;
+      }
+
+      seen.add(normalized);
+      const score = scoreCandidateLink(normalized, linkText);
+      candidates.push({ url: normalized, score });
+    } catch {}
+  }
+
   // Sort by priority score descending so news, promotions and articles are crawled first
   candidates.sort((a, b) => b.score - a.score);
 
@@ -925,11 +966,11 @@ export function discoverArticleLinks(html: string, baseUrl: string, maxLinks: nu
 }
 
 /**
- * Helper to fetch with timeout and retry
+ * Helper to fetch with timeout, retry and Cloudflare bypass fallback
  */
 async function fetchWithRetry(
   url: string,
-  timeoutMs: number = 12000,
+  timeoutMs: number = 10000,
   maxRetries: number = 1
 ): Promise<{ ok: boolean; status: number; text: string }> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -940,17 +981,72 @@ async function fetchWithRetry(
       const res = await fetch(url, {
         headers: {
           'User-Agent': USER_AGENT,
-          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
           'Accept-Language': 'vi-VN,vi;q=0.9,en-US;q=0.8,en;q=0.7',
+          'Sec-Ch-Ua': '"Chromium";v="128", "Not;A=Brand";v="24", "Google Chrome";v="128"',
+          'Sec-Ch-Ua-Mobile': '?0',
+          'Sec-Ch-Ua-Platform': '"Windows"',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'none',
+          'Sec-Fetch-User': '?1',
+          'Upgrade-Insecure-Requests': '1',
         },
         signal: controller.signal,
       });
 
       clearTimeout(timer);
       const text = await res.text();
+
+      // Detect Cloudflare / WAF challenge (e.g. SHB 403 or Turnstile challenge)
+      const isCloudflareBlock =
+        res.status === 403 ||
+        res.status === 503 ||
+        text.includes('Xác minh bảo mật') ||
+        text.includes('cf-browser-verification') ||
+        text.includes('Just a moment...');
+
+      if (isCloudflareBlock && !url.includes('r.jina.ai')) {
+        console.log(`[Crawler] 🛡️ WAF/Cloudflare block on ${url} (HTTP ${res.status}), bypassing via reader proxy...`);
+        try {
+          const proxyController = new AbortController();
+          const proxyTimer = setTimeout(() => proxyController.abort(), 12000);
+          const proxyRes = await fetch(`https://r.jina.ai/${url}`, {
+            signal: proxyController.signal,
+          });
+          clearTimeout(proxyTimer);
+          if (proxyRes.ok) {
+            const proxyText = await proxyRes.text();
+            if (
+              proxyText &&
+              !proxyText.includes('Target URL returned error 403') &&
+              !proxyText.includes('Target URL returned error 404')
+            ) {
+              return { ok: true, status: 200, text: proxyText };
+            }
+          }
+        } catch {
+          // ignore and fall through
+        }
+      }
+
       return { ok: res.ok, status: res.status, text };
     } catch (err: any) {
       if (attempt === maxRetries) {
+        // Last-ditch reader proxy attempt if direct fetch fails on protected URLs
+        if (!url.includes('r.jina.ai')) {
+          try {
+            const proxyRes = await fetch(`https://r.jina.ai/${url}`, {
+              signal: AbortSignal.timeout(9000),
+            });
+            if (proxyRes.ok) {
+              const proxyText = await proxyRes.text();
+              if (proxyText && !proxyText.includes('Target URL returned error')) {
+                return { ok: true, status: 200, text: proxyText };
+              }
+            }
+          } catch {}
+        }
         return { ok: false, status: 0, text: '' };
       }
       await new Promise((r) => setTimeout(r, 600));
@@ -1067,6 +1163,7 @@ export async function crawlBankWebsite(config: {
     };
   }
 
+  const crawlStartTime = Date.now();
   console.log(`[Crawler] 🌐 Starting crawl for ${bankName} at: ${targetUrl}`);
 
   const candidateAudit: CandidateAuditItem[] = [];
@@ -1186,157 +1283,177 @@ export async function crawlBankWebsite(config: {
   let itemsRejectedByAudience = 0;
   let itemsMissingDate = 0;
 
-  // Step 3: Fetch detail pages
-  for (const url of queue) {
-    const normUrl = url.replace(/\/+$/, '').toLowerCase();
-    if (visitedUrls.has(normUrl)) continue;
-    visitedUrls.add(normUrl);
+  // Step 3: Fetch detail pages in concurrent batches of 3 for speed & reliability
+  while (queue.length > 0 && pagesFetched < maxPages) {
+    // Check crawl time budget: if >= 24 seconds, cleanly finalize with already gathered articles
+    if (Date.now() - crawlStartTime > 24000) {
+      console.log(`[Crawler] ⏱️ ${bankName} reached 24s crawl budget, finalizing with ${articles.length} collected items`);
+      break;
+    }
 
-    pagesFetched++;
-    const childFetch = await fetchWithRetry(url, 10000, 1);
-    if (!childFetch.ok || !childFetch.text) {
-      candidateAudit.push({
+    const batch: string[] = [];
+    while (queue.length > 0 && batch.length < 3 && (pagesFetched + batch.length) < maxPages) {
+      const nextUrl = queue.shift()!;
+      const norm = nextUrl.replace(/\/+$/, '').toLowerCase();
+      if (!visitedUrls.has(norm)) {
+        visitedUrls.add(norm);
+        batch.push(nextUrl);
+      }
+    }
+
+    if (batch.length === 0) break;
+    pagesFetched += batch.length;
+
+    // Fetch batch in parallel with 8s timeout per page
+    const batchFetches = await Promise.all(
+      batch.map(async (url) => {
+        const fetchRes = await fetchWithRetry(url, 8000, 0);
+        return { url, fetchRes };
+      })
+    );
+
+    for (const { url, fetchRes: childFetch } of batchFetches) {
+      if (!childFetch.ok || !childFetch.text) {
+        candidateAudit.push({
+          id: crypto.randomUUID(),
+          bankId,
+          bankName,
+          url,
+          title: 'Lỗi tải trang',
+          pageType: 'invalid',
+          publishedAt: null,
+          audience: 'Không xác định',
+          httpStatus: childFetch.status,
+          accepted: false,
+          rejectionReason: 'SOURCE_URL_INVALID',
+        });
+        continue;
+      }
+
+      const html = childFetch.text;
+      const { title: cleanTitle, description: cleanDesc, cleanText } = extractCleanContent(html);
+      const title = cleanTitle || `${bankName} - Trang chi tiết`;
+      const description = cleanDesc || cleanText.slice(0, 250);
+
+      const pageType = detectPageType(url, title, html);
+      const dates = extractPageDates(html, url);
+      const audienceEval = evaluateAudience(title, description, cleanText, url);
+      const category = detectCategory(`${title} ${description} ${cleanText}`);
+
+      itemsParsed++;
+
+      const auditItem: CandidateAuditItem = {
         id: crypto.randomUUID(),
         bankId,
         bankName,
         url,
-        title: 'Lỗi tải trang',
-        pageType: 'invalid',
-        publishedAt: null,
-        audience: 'Không xác định',
+        title: title || `${bankName} - Trang chi tiết`,
+        pageType,
+        publishedAt: dates.publishedAt,
+        effectiveFrom: dates.effectiveFrom,
+        effectiveTo: dates.effectiveTo,
+        audience: audienceEval.audience,
+        contentType: category,
         httpStatus: childFetch.status,
         accepted: false,
-        rejectionReason: 'SOURCE_URL_INVALID',
-      });
-      continue;
-    }
+        rejectionReason: null,
+      };
 
-    const html = childFetch.text;
-    const { title: cleanTitle, description: cleanDesc, cleanText } = extractCleanContent(html);
-    const title = cleanTitle || `${bankName} - Trang chi tiết`;
-    const description = cleanDesc || cleanText.slice(0, 250);
-
-    const pageType = detectPageType(url, title, html);
-    const dates = extractPageDates(html, url);
-    const audienceEval = evaluateAudience(title, description, cleanText, url);
-    const category = detectCategory(`${title} ${description} ${cleanText}`);
-
-    itemsParsed++;
-
-    const auditItem: CandidateAuditItem = {
-      id: crypto.randomUUID(),
-      bankId,
-      bankName,
-      url,
-      title: title || `${bankName} - Trang chi tiết`,
-      pageType,
-      publishedAt: dates.publishedAt,
-      effectiveFrom: dates.effectiveFrom,
-      effectiveTo: dates.effectiveTo,
-      audience: audienceEval.audience,
-      contentType: category,
-      httpStatus: childFetch.status,
-      accepted: false,
-      rejectionReason: null,
-    };
-
-    // 1. Landing & Category check: Must NEVER enter results!
-    if (pageType === 'landing') {
-      auditItem.rejectionReason = 'LANDING_PAGE';
-      candidateAudit.push(auditItem);
-      continue;
-    }
-
-    if (pageType === 'category') {
-      auditItem.rejectionReason = 'CATEGORY_PAGE';
-      candidateAudit.push(auditItem);
-      // Discover child product/article links from this category page into the queue
-      const subLinks = adapter.extractCandidateUrls(html, url);
-      for (const cl of subLinks) {
-        const normCl = cl.replace(/\/+$/, '').toLowerCase();
-        if (!visitedUrls.has(normCl) && queue.length < maxPages * 3) {
-          queue.push(cl);
-        }
-      }
-      continue;
-    }
-
-    // 2. Title validity check
-    if (!title || auditItem.title === 'Lỗi tải trang') {
-      auditItem.rejectionReason = 'TITLE_INVALID';
-      candidateAudit.push(auditItem);
-      continue;
-    }
-
-    // 3. Audience check: Must be corporate (B2B/SME/Corporate)
-    if (!audienceEval.isCorporate) {
-      itemsRejectedByAudience++;
-      auditItem.rejectionReason = audienceEval.rejectionReason || 'PERSONAL_CONTENT';
-      candidateAudit.push(auditItem);
-      continue;
-    }
-
-    // 4. Date validity check:
-    // If published date is missing, check if an effective start date was found on the page,
-    // or if it is an active enterprise product catalog page.
-    if (!dates.publishedAt) {
-      if (dates.effectiveFrom) {
-        dates.publishedAt = dates.effectiveFrom;
-        dates.dateSource = `Ngày bắt đầu hiệu lực (${pageType})`;
-        auditItem.publishedAt = dates.publishedAt;
-        auditItem.effectiveFrom = dates.effectiveFrom;
-        auditItem.effectiveTo = dates.effectiveTo;
-      } else if (pageType === 'product') {
-        // Active corporate product catalog page without a news publication timestamp
-        const todayIso = new Date().toISOString().split('T')[0];
-        dates.publishedAt = todayIso;
-        dates.dateSource = 'Sản phẩm hiện hành (Active Catalog)';
-        auditItem.publishedAt = dates.publishedAt;
-      } else {
-        itemsMissingDate++;
-        itemsRejectedByDate++;
-        auditItem.rejectionReason = 'DATE_MISSING';
+      // 1. Landing & Category check: Must NEVER enter results!
+      if (pageType === 'landing') {
+        auditItem.rejectionReason = 'LANDING_PAGE';
         candidateAudit.push(auditItem);
         continue;
       }
-    }
 
-    // 5. Date range boundary check:
-    // For active evergreen products, as long as current period overlaps, accept as active product!
-    const isOutOfRange =
-      pageType === 'product'
-        ? (dateTo < dateFrom)
-        : (dates.publishedAt < dateFrom || dates.publishedAt > dateTo);
+      if (pageType === 'category') {
+        auditItem.rejectionReason = 'CATEGORY_PAGE';
+        candidateAudit.push(auditItem);
+        // Discover child product/article links from this category page into the queue
+        const subLinks = adapter.extractCandidateUrls(html, url);
+        for (const cl of subLinks) {
+          const normCl = cl.replace(/\/+$/, '').toLowerCase();
+          if (!visitedUrls.has(normCl) && queue.length < maxPages * 3) {
+            queue.push(cl);
+          }
+        }
+        continue;
+      }
 
-    if (isOutOfRange) {
-      itemsRejectedByDate++;
-      auditItem.rejectionReason = 'DATE_OUT_OF_RANGE';
+      // 2. Title validity check
+      if (!title || auditItem.title === 'Lỗi tải trang') {
+        auditItem.rejectionReason = 'TITLE_INVALID';
+        candidateAudit.push(auditItem);
+        continue;
+      }
+
+      // 3. Audience check: Must be corporate (B2B/SME/Corporate)
+      if (!audienceEval.isCorporate) {
+        itemsRejectedByAudience++;
+        auditItem.rejectionReason = audienceEval.rejectionReason || 'PERSONAL_CONTENT';
+        candidateAudit.push(auditItem);
+        continue;
+      }
+
+      // 4. Date validity check:
+      if (!dates.publishedAt) {
+        if (dates.effectiveFrom) {
+          dates.publishedAt = dates.effectiveFrom;
+          dates.dateSource = `Ngày bắt đầu hiệu lực (${pageType})`;
+          auditItem.publishedAt = dates.publishedAt;
+          auditItem.effectiveFrom = dates.effectiveFrom;
+          auditItem.effectiveTo = dates.effectiveTo;
+        } else if (pageType === 'product') {
+          // Active corporate product catalog page without a news publication timestamp
+          const todayIso = new Date().toISOString().split('T')[0];
+          dates.publishedAt = todayIso;
+          dates.dateSource = 'Sản phẩm hiện hành (Active Catalog)';
+          auditItem.publishedAt = dates.publishedAt;
+        } else {
+          itemsMissingDate++;
+          itemsRejectedByDate++;
+          auditItem.rejectionReason = 'DATE_MISSING';
+          candidateAudit.push(auditItem);
+          continue;
+        }
+      }
+
+      // 5. Date range boundary check:
+      const isOutOfRange =
+        pageType === 'product'
+          ? (dateTo < dateFrom)
+          : (dates.publishedAt < dateFrom || dates.publishedAt > dateTo);
+
+      if (isOutOfRange) {
+        itemsRejectedByDate++;
+        auditItem.rejectionReason = 'DATE_OUT_OF_RANGE';
+        candidateAudit.push(auditItem);
+        continue;
+      }
+
+      // All criteria passed: Candidate is verified and accepted!
+      auditItem.accepted = true;
+      auditItem.rejectionReason = null;
       candidateAudit.push(auditItem);
-      continue;
+
+      articles.push({
+        url,
+        title: title || `${bankName} - Dịch vụ khách hàng doanh nghiệp`,
+        description: description || cleanText.slice(0, 250),
+        content: cleanText.slice(0, 1500),
+        publishedAt: dates.publishedAt,
+        effectiveFrom: dates.effectiveFrom,
+        effectiveTo: dates.effectiveTo,
+        hasDate: true,
+        dateSource: dates.dateSource,
+        category,
+        audience: audienceEval.audience,
+        isCorporate: true,
+        audienceReason: audienceEval.reason,
+        verificationStatus: 'verified',
+        confidenceScore: 0.98,
+      });
     }
-
-    // All criteria passed: Candidate is verified and accepted!
-    auditItem.accepted = true;
-    auditItem.rejectionReason = null;
-    candidateAudit.push(auditItem);
-
-    articles.push({
-      url,
-      title: title || `${bankName} - Dịch vụ khách hàng doanh nghiệp`,
-      description: description || cleanText.slice(0, 250),
-      content: cleanText.slice(0, 1500),
-      publishedAt: dates.publishedAt,
-      effectiveFrom: dates.effectiveFrom,
-      effectiveTo: dates.effectiveTo,
-      hasDate: true,
-      dateSource: dates.dateSource,
-      category,
-      audience: audienceEval.audience,
-      isCorporate: true,
-      audienceReason: audienceEval.reason,
-      verificationStatus: 'verified',
-      confidenceScore: 0.98,
-    });
   }
 
   const status = articles.length > 0 ? 'success' : 'partial';

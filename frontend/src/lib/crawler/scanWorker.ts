@@ -51,8 +51,8 @@ async function runWithConcurrency<T>(
  */
 async function executeWithTimeoutAndRetry<T>(
   fn: () => Promise<T>,
-  timeoutMs: number = 25000,
-  maxRetries: number = 2
+  timeoutMs: number = 40000,
+  maxRetries: number = 0
 ): Promise<T> {
   let lastError: any;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -68,8 +68,12 @@ async function executeWithTimeoutAndRetry<T>(
       return await Promise.race([fn(), timeoutPromise]);
     } catch (err: any) {
       lastError = err;
-      // If fatal token missing error, do not retry
-      if (err.message?.includes('FACEBOOK_TOKEN_MISSING') || err.message?.includes('INVALID_URL')) {
+      // If fatal error or timeout, do not retry
+      if (
+        err.message?.includes('FACEBOOK_TOKEN_MISSING') ||
+        err.message?.includes('INVALID_URL') ||
+        err.message?.includes('SOURCE_TIMEOUT')
+      ) {
         break;
       }
       if (attempt < maxRetries) {
@@ -79,6 +83,41 @@ async function executeWithTimeoutAndRetry<T>(
   }
   throw lastError;
 }
+
+const CANONICAL_BANK_WEBSITES: Record<string, string> = {
+  '10000000-0000-0000-0000-000000000001': 'https://www.mbbank.com.vn/khach-hang-doanh-nghiep',
+  '10000000-0000-0000-0000-000000000002': 'https://techcombank.com/khach-hang-doanh-nghiep',
+  '10000000-0000-0000-0000-000000000003': 'https://www.vietinbank.vn/doanh-nghiep',
+  '10000000-0000-0000-0000-000000000004': 'https://bidv.com.vn/vn/doanh-nghiep/',
+  '10000000-0000-0000-0000-000000000005': 'https://www.vpbank.com.vn/doanh-nghiep',
+  '10000000-0000-0000-0000-000000000006': 'https://acb.com.vn/doanh-nghiep',
+  '10000000-0000-0000-0000-000000000007': 'https://www.sacombank.com.vn/doanh-nghiep.html',
+  '10000000-0000-0000-0000-000000000008': 'https://www.shb.com.vn/category/khach-hang-doanh-nghiep/',
+  '10000000-0000-0000-0000-000000000009': 'https://hdbank.com.vn/vi/corporate',
+  '10000000-0000-0000-0000-000000000010': 'https://tpb.vn/doanh-nghiep',
+  '10000000-0000-0000-0000-000000000011': 'https://www.vib.com.vn/vn/khach-hang-doanh-nghiep',
+  '10000000-0000-0000-0000-000000000012': 'https://www.msb.com.vn/vi/doanh-nghiep',
+  '10000000-0000-0000-0000-000000000013': 'https://ocb.com.vn/vi/doanh-nghiep',
+  '10000000-0000-0000-0000-000000000014': 'https://www.seabank.com.vn/doanh-nghiep.2',
+  '10000000-0000-0000-0000-000000000015': 'https://www.agribank.com.vn/vn/doanh-nghiep',
+  '10000000-0000-0000-0000-000000000016': 'https://www.vietcombank.com.vn/vi-VN/To-chuc/SMEs',
+  MB: 'https://www.mbbank.com.vn/khach-hang-doanh-nghiep',
+  TCB: 'https://techcombank.com/khach-hang-doanh-nghiep',
+  CTG: 'https://www.vietinbank.vn/doanh-nghiep',
+  BIDV: 'https://bidv.com.vn/vn/doanh-nghiep/',
+  VPB: 'https://www.vpbank.com.vn/doanh-nghiep',
+  ACB: 'https://acb.com.vn/doanh-nghiep',
+  STB: 'https://www.sacombank.com.vn/doanh-nghiep.html',
+  SHB: 'https://www.shb.com.vn/category/khach-hang-doanh-nghiep/',
+  HDB: 'https://hdbank.com.vn/vi/corporate',
+  TPB: 'https://tpb.vn/doanh-nghiep',
+  VIB: 'https://www.vib.com.vn/vn/khach-hang-doanh-nghiep',
+  MSB: 'https://www.msb.com.vn/vi/doanh-nghiep',
+  OCB: 'https://ocb.com.vn/vi/doanh-nghiep',
+  SSB: 'https://www.seabank.com.vn/doanh-nghiep.2',
+  AGR: 'https://www.agribank.com.vn/vn/doanh-nghiep',
+  VCB: 'https://www.vietcombank.com.vn/vi-VN/To-chuc/SMEs',
+};
 
 /**
  * Main Background Scan Worker function
@@ -216,13 +255,14 @@ async function runScanWorkerInternal(scanId: string): Promise<void> {
 
     try {
       if (sourceType === 'website') {
-        const websiteUrl = sourceConfig?.business_hub_url || sourceConfig?.website_url || '';
+        const fallbackUrl = CANONICAL_BANK_WEBSITES[bankId] || CANONICAL_BANK_WEBSITES[bank?.code || ''] || '';
+        const websiteUrl = sourceConfig?.business_hub_url || sourceConfig?.website_url || fallbackUrl;
         const webResult: WebCrawlResult = await executeWithTimeoutAndRetry(() =>
           crawlBankWebsite({
             bankId,
             bankName,
             corporateHomepageUrl: websiteUrl,
-            businessHubUrl: sourceConfig?.business_hub_url,
+            businessHubUrl: sourceConfig?.business_hub_url || fallbackUrl,
             newsUrls: sourceConfig?.news_urls,
             promotionUrls: sourceConfig?.promotion_urls,
             sitemapUrl: sourceConfig?.sitemap_url,
@@ -232,7 +272,7 @@ async function runScanWorkerInternal(scanId: string): Promise<void> {
             adaptorName: sourceConfig?.adaptor_name,
             dateFrom: scanJob.date_from || scanJob.dateFrom,
             dateTo: scanJob.date_to || scanJob.dateTo,
-            maxPages: 20,
+            maxPages: 8,
           })
         );
 
