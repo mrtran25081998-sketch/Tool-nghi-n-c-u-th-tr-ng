@@ -28,18 +28,24 @@ async def execute_crawl_job(job_id: str, date_from_str: str = "2024-01-01", date
     website_adapter = WebsiteAdapter(max_pages=3)
     facebook_adapter = FacebookAdapter()
 
-    # Target banks to scan (Top 10 Vietnamese Banks - Corporate / Enterprise)
+    # Target banks to scan (All 16 Vietnamese Banks - Corporate / Enterprise)
     sample_targets = [
-        {"bank": "MB Bank", "type": "website", "url": "https://business.mbbank.com.vn"},
-        {"bank": "BIDV", "type": "website", "url": "https://www.bidv.com.vn/vi/khach-hang-doanh-nghiep"},
-        {"bank": "Vietcombank", "type": "website", "url": "https://www.vietcombank.com.vn/khach-hang-doanh-nghiep"},
-        {"bank": "VietinBank", "type": "website", "url": "https://www.vietinbank.vn/web/home/vn/product/corporate"},
-        {"bank": "Agribank", "type": "website", "url": "https://www.agribank.com.vn/vn/khach-hang-doanh-nghiep"},
+        {"bank": "MB Bank", "type": "website", "url": "https://www.mbbank.com.vn/khach-hang-doanh-nghiep"},
         {"bank": "Techcombank", "type": "website", "url": "https://techcombank.com/khach-hang-doanh-nghiep"},
-        {"bank": "ACB", "type": "website", "url": "https://www.acb.com.vn/san-pham-dich-vu/khach-hang-doanh-nghiep"},
+        {"bank": "VietinBank", "type": "website", "url": "https://www.vietinbank.vn/doanh-nghiep"},
+        {"bank": "BIDV", "type": "website", "url": "https://bidv.com.vn/vn/doanh-nghiep/"},
         {"bank": "VPBank", "type": "website", "url": "https://www.vpbank.com.vn/doanh-nghiep"},
-        {"bank": "SHB", "type": "website", "url": "https://www.shb.com.vn/khach-hang-doanh-nghiep"},
-        {"bank": "Sacombank", "type": "website", "url": "https://www.sacombank.com.vn/doanh-nghiep"},
+        {"bank": "ACB", "type": "website", "url": "https://acb.com.vn/doanh-nghiep"},
+        {"bank": "Sacombank", "type": "website", "url": "https://www.sacombank.com.vn/doanh-nghiep.html"},
+        {"bank": "SHB", "type": "website", "url": "https://www.shb.com.vn/category/khach-hang-doanh-nghiep/"},
+        {"bank": "HDBank", "type": "website", "url": "https://hdbank.com.vn/vi/corporate"},
+        {"bank": "TPBank", "type": "website", "url": "https://tpb.vn/doanh-nghiep"},
+        {"bank": "VIB", "type": "website", "url": "https://www.vib.com.vn/vn/khach-hang-doanh-nghiep"},
+        {"bank": "MSB", "type": "website", "url": "https://www.msb.com.vn/vi/doanh-nghiep"},
+        {"bank": "OCB", "type": "website", "url": "https://ocb.com.vn/vi/doanh-nghiep"},
+        {"bank": "SeABank", "type": "website", "url": "https://www.seabank.com.vn/doanh-nghiep.2"},
+        {"bank": "Agribank", "type": "website", "url": "https://www.agribank.com.vn/vn/doanh-nghiep"},
+        {"bank": "Vietcombank", "type": "website", "url": "https://www.vietcombank.com.vn/vi-VN/To-chuc/SMEs"},
     ]
 
     all_raw_items: list[RawItem] = []
